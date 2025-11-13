@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/llm_provider.dart';
 import '../models/regional_preference.dart';
@@ -8,6 +9,52 @@ class TranslationService {
   final http.Client client;
 
   TranslationService({http.Client? client}) : client = client ?? http.Client();
+
+  /// Converts technical exceptions into user-friendly error messages
+  String _getUserFriendlyErrorMessage(dynamic error) {
+    final errorString = error.toString();
+    
+    // Network connectivity issues
+    if (error is SocketException) {
+      if (errorString.contains('Failed host lookup')) {
+        return 'Unable to connect to the translation service. Please check your internet connection and try again.';
+      }
+      return 'Network error: Unable to reach the translation service. Please check your connection.';
+    }
+    
+    // HTTP client errors
+    if (error is http.ClientException) {
+      return 'Connection error: Could not connect to the translation service.';
+    }
+    
+    // Timeout errors
+    if (errorString.contains('TimeoutException') || errorString.contains('timed out')) {
+      return 'Request timed out. The service is taking too long to respond. Please try again.';
+    }
+    
+    // API key errors
+    if (errorString.contains('401') || errorString.contains('Unauthorized')) {
+      return 'Invalid API key. Please check your API key in settings.';
+    }
+    
+    // Rate limiting
+    if (errorString.contains('429') || errorString.contains('rate limit')) {
+      return 'Rate limit exceeded. Please wait a moment before trying again.';
+    }
+    
+    // Server errors
+    if (errorString.contains('500') || errorString.contains('502') || errorString.contains('503')) {
+      return 'The translation service is temporarily unavailable. Please try again later.';
+    }
+    
+    // API response errors
+    if (errorString.contains('Translation failed:')) {
+      return errorString.replaceAll('Exception: ', '');
+    }
+    
+    // Generic fallback
+    return 'Translation failed: ${errorString.replaceAll('Exception: ', '')}';
+  }
 
   String _buildTranslationPrompt({
     required String text,
@@ -160,42 +207,46 @@ class TranslationService {
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
   }) async {
-    final url = Uri.parse(provider.apiEndpoint);
-    
-    // Build translation instruction using centralized prompt function
-    final translationInstruction = _buildTranslationPrompt(
-      text: text,
-      sourceLanguage: sourceLanguage,
-      targetLanguage: targetLanguage,
-      regionalPreference: regionalPreference,
-    );
-    
-    final response = await client.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $apiKey',
-      },
-      body: jsonEncode({
-        'model': provider.model,
-        'messages': [
-          {
-            'role': 'system',
-            'content': 'You are a professional translator. Translate the given text to the target language. Only respond with the translated text, nothing else.',
-          },
-          {
-            'role': 'user',
-            'content': translationInstruction,
-          },
-        ],
-      }),
-    );
+    try {
+      final url = Uri.parse(provider.apiEndpoint);
+      
+      // Build translation instruction using centralized prompt function
+      final translationInstruction = _buildTranslationPrompt(
+        text: text,
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+        regionalPreference: regionalPreference,
+      );
+      
+      final response = await client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: jsonEncode({
+          'model': provider.model,
+          'messages': [
+            {
+              'role': 'system',
+              'content': 'You are a professional translator. Translate the given text to the target language. Only respond with the translated text, nothing else.',
+            },
+            {
+              'role': 'user',
+              'content': translationInstruction,
+            },
+          ],
+        }),
+      ).timeout(const Duration(seconds: 30));
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['choices'][0]['message']['content'].toString().trim();
-    } else {
-      throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['choices'][0]['message']['content'].toString().trim();
+      } else {
+        throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      throw Exception(_getUserFriendlyErrorMessage(e));
     }
   }
 
@@ -206,39 +257,43 @@ class TranslationService {
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
   }) async {
-    final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}?key=$apiKey');
-    
-    // Build translation instruction using centralized prompt function
-    final translationInstruction = 'You are a professional translator. Translate the given text to the target language. Only respond with the translated text, nothing else.\n\n${_buildTranslationPrompt(
-      text: text,
-      sourceLanguage: sourceLanguage,
-      targetLanguage: targetLanguage,
-      regionalPreference: regionalPreference,
-    )}';
-    
-    final response = await client.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'contents': [
-          {
-            'parts': [
-              {
-                'text': translationInstruction,
-              },
-            ],
-          },
-        ],
-      }),
-    );
+    try {
+      final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}?key=$apiKey');
+      
+      // Build translation instruction using centralized prompt function
+      final translationInstruction = 'You are a professional translator. Translate the given text to the target language. Only respond with the translated text, nothing else.\n\n${_buildTranslationPrompt(
+        text: text,
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+        regionalPreference: regionalPreference,
+      )}';
+      
+      final response = await client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': [
+                {
+                  'text': translationInstruction,
+                },
+              ],
+            },
+          ],
+        }),
+      ).timeout(const Duration(seconds: 30));
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
-    } else {
-      throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+      } else {
+        throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      throw Exception(_getUserFriendlyErrorMessage(e));
     }
   }
 }

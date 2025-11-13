@@ -6,6 +6,7 @@ A Google Translate-like Flutter application that uses LLM providers (Grok, OpenA
 
 - 🌍 Multi-language translation support (12+ languages)
 - 🔍 **Auto-detect source language** - Automatically identifies the input language
+- 🎤 **Voice input with Whisper** - Speak to translate using local AI transcription (NEW!)
 - 📜 **Translation history** - Automatically saves all translations with timestamp
 - 📊 **Performance statistics** - Track latency metrics per provider with advanced filtering
   - Time to respond per word count
@@ -21,7 +22,7 @@ A Google Translate-like Flutter application that uses LLM providers (Grok, OpenA
 - 🔄 Language swap functionality
 - ⚙️ Settings page for API key configuration
 - 📱 Clean, Material Design 3 UI
-- ✅ Comprehensive test coverage (67 tests)
+- ✅ Comprehensive test coverage (67+ tests)
 
 ## Architecture
 
@@ -38,7 +39,8 @@ lib/
 │   ├── translation_service.dart     # Translation logic with T/N support & timing
 │   ├── settings_service.dart        # Settings management
 │   ├── history_service.dart         # Translation history management
-│   └── stats_service.dart           # Statistics tracking & analytics
+│   ├── stats_service.dart           # Statistics tracking & analytics
+│   └── voice_input_service.dart     # Voice recording & Whisper transcription (NEW!)
 ├── screens/
 │   ├── translation_screen.dart      # Main translation UI
 │   ├── settings_screen.dart         # Settings configuration UI
@@ -118,10 +120,35 @@ See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for detailed instructions.
 
 1. **Select source language**: Choose a specific language or use **"Auto-detect"** (default) to let the LLM identify the language automatically
 2. **Select target language**: Choose the language you want to translate to
-3. **Enter text**: Type or paste text in the top text field
+3. **Enter text**: Type or paste text in the top text field, **OR use voice input** (🎤 button)
 4. **Tap "Translate"**: Wait for the translation to appear
 5. **View result**: The translation appears in the bottom text field
 6. **Swap languages** (optional): Use the swap button (⇄) to swap source and target languages
+
+### Using Voice Input (NEW! 🎤)
+
+The app now supports voice-to-text using OpenAI's Whisper model running **on-device** for maximum privacy:
+
+1. **Setup Whisper**: See [VOICE_INPUT_SETUP.md](VOICE_INPUT_SETUP.md) for detailed setup instructions
+2. **Start recording**: Tap the blue microphone button in the source text field
+3. **Speak clearly**: Say your text in any supported language
+4. **Stop recording**: Tap the red stop button when finished
+5. **Auto-translate**: The app will transcribe your speech and automatically translate it
+
+**Features:**
+- ✅ **100% On-Device** - All processing happens locally, your audio never leaves your device
+- ✅ **Offline Capable** - Works without internet connection
+- ✅ **Multi-language** transcription support
+- ✅ **Privacy-First** - No cloud uploads, no API calls
+- ✅ **Real-time** recording indicator
+- ✅ **Automatic** translation after transcription
+- ✅ Built with TDD - comprehensive test coverage
+
+**Requirements:**
+- Whisper model file (ggml-base.en.bin or similar)
+- Compiled whisper.cpp native library
+- Microphone permission (auto-requested on first use)
+- See [VOICE_INPUT_SETUP.md](VOICE_INPUT_SETUP.md) for complete setup guide
 
 ### Using Auto-detect
 
@@ -226,6 +253,11 @@ dependencies:
   http: ^1.2.0
   shared_preferences: ^2.2.2
   cupertino_icons: ^1.0.8
+  # Voice input dependencies
+  permission_handler: ^11.0.1
+  path_provider: ^2.1.1
+  record: ^5.0.4
+  path: ^1.8.3
 
 dev_dependencies:
   flutter_test: sdk

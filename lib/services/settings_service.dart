@@ -6,6 +6,8 @@ class SettingsService {
   static const String _providerKey = 'selected_provider';
   static const String _apiKeyPrefix = 'api_key_';
   static const String _regionalPreferenceKey = 'regional_preference';
+  static const String _sourceLanguageKey = 'source_language';
+  static const String _targetLanguageKey = 'target_language';
 
   Future<LLMProvider> getSelectedProvider() async {
     final prefs = await SharedPreferences.getInstance();
@@ -49,5 +51,25 @@ class SettingsService {
   Future<void> setRegionalPreference(RegionalPreference preference) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_regionalPreferenceKey, preference.toString().split('.').last);
+  }
+
+  Future<String> getSourceLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_sourceLanguageKey) ?? 'Auto-detect'; // Default source language
+  }
+
+  Future<void> setSourceLanguage(String language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sourceLanguageKey, language);
+  }
+
+  Future<String> getTargetLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_targetLanguageKey) ?? 'English'; // Default target language
+  }
+
+  Future<void> setTargetLanguage(String language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_targetLanguageKey, language);
   }
 }

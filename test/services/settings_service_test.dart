@@ -161,5 +161,91 @@ void main() {
       // Assert
       expect(preference, RegionalPreference.none);
     });
+
+    test('should return Auto-detect as default source language', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      final sourceLanguage = await settingsService.getSourceLanguage();
+
+      // Assert
+      expect(sourceLanguage, 'Auto-detect');
+    });
+
+    test('should save and retrieve source language', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setSourceLanguage('English');
+      final sourceLanguage = await settingsService.getSourceLanguage();
+
+      // Assert
+      expect(sourceLanguage, 'English');
+    });
+
+    test('should return English as default target language', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      final targetLanguage = await settingsService.getTargetLanguage();
+
+      // Assert
+      expect(targetLanguage, 'English');
+    });
+
+    test('should save and retrieve target language', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setTargetLanguage('French');
+      final targetLanguage = await settingsService.getTargetLanguage();
+
+      // Assert
+      expect(targetLanguage, 'French');
+    });
+
+    test('should persist both source and target language selections', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setSourceLanguage('German');
+      await settingsService.setTargetLanguage('Japanese');
+      
+      final sourceLanguage = await settingsService.getSourceLanguage();
+      final targetLanguage = await settingsService.getTargetLanguage();
+
+      // Assert
+      expect(sourceLanguage, 'German');
+      expect(targetLanguage, 'Japanese');
+    });
+
+    test('should handle changing language selections multiple times', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setSourceLanguage('Chinese');
+      await settingsService.setTargetLanguage('Korean');
+      
+      var source = await settingsService.getSourceLanguage();
+      var target = await settingsService.getTargetLanguage();
+      expect(source, 'Chinese');
+      expect(target, 'Korean');
+      
+      await settingsService.setSourceLanguage('French');
+      await settingsService.setTargetLanguage('Portuguese');
+      
+      source = await settingsService.getSourceLanguage();
+      target = await settingsService.getTargetLanguage();
+
+      // Assert
+      expect(source, 'French');
+      expect(target, 'Portuguese');
+    });
   });
 }
