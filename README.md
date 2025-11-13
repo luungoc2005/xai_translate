@@ -7,7 +7,7 @@ A Google Translate-like Flutter application that uses LLM providers (Grok, OpenA
 - 🌍 Multi-language translation support (12+ languages)
 - 🤖 Multiple LLM provider support:
   - **Grok** (xAI) - Default provider
-  - **OpenAI** (GPT-4)
+  - **OpenAI** (GPT-5)
   - **Gemini** (Google)
 - 🔄 Language swap functionality
 - ⚙️ Settings page for API key configuration
@@ -45,10 +45,23 @@ test/
 
 - Flutter SDK (3.10.0 or higher)
 - Dart SDK (3.10.0 or higher)
+- **Windows Users**: Enable Developer Mode (see [WINDOWS_SETUP.md](WINDOWS_SETUP.md))
 - API keys from at least one provider:
   - [Grok API Key](https://x.ai) (xAI)
   - [OpenAI API Key](https://platform.openai.com)
   - [Gemini API Key](https://aistudio.google.com)
+
+### Windows Setup (Important!)
+
+If you're on Windows, you **must** enable Developer Mode before running the app:
+
+1. Open Settings: `start ms-settings:developers`
+2. Enable **Developer Mode**
+3. Restart your terminal
+
+Without this, you'll get: `MissingPluginException: No implementation found for method getAll`
+
+See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for detailed instructions.
 
 ### Installation
 
@@ -178,6 +191,24 @@ Contributions are welcome! Please ensure:
 - Code follows Flutter best practices
 
 ## Troubleshooting
+
+### Windows: "No implementation found for method getAll"
+**This is the most common issue on Windows!**
+
+- **Cause**: Developer Mode is not enabled
+- **Solution**: Enable Developer Mode in Windows Settings
+- **Details**: See [WINDOWS_SETUP.md](WINDOWS_SETUP.md)
+
+Quick fix:
+```powershell
+# Open Developer Settings
+start ms-settings:developers
+
+# Then enable Developer Mode, restart terminal, and run:
+flutter clean
+flutter pub get
+flutter run
+```
 
 ### API Key Issues
 - Ensure your API key is valid and has sufficient credits

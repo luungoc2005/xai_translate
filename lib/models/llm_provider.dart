@@ -30,11 +30,11 @@ extension LLMProviderExtension on LLMProvider {
   String get model {
     switch (this) {
       case LLMProvider.grok:
-        return 'grok-beta';
+        return 'grok-4-fast';
       case LLMProvider.openai:
-        return 'gpt-4o-mini';
+        return 'gpt-5-mini-2025-08-07';
       case LLMProvider.gemini:
-        return 'gemini-pro';
+        return 'gemini-2.5-flash-image';
     }
   }
 

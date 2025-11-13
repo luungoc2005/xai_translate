@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xai_translate/services/settings_service.dart';
@@ -11,12 +10,14 @@ void main() {
     late SettingsService settingsService;
 
     setUp(() {
+      // Initialize mock shared preferences before each test
+      SharedPreferences.setMockInitialValues({});
       settingsService = SettingsService();
     });
 
     test('should return Grok as default provider', () async {
       // Arrange
-      SharedPreferences.setMockInitialValues({});
+      // Mock already set up in setUp()
       
       // Act
       final provider = await settingsService.getSelectedProvider();
@@ -27,7 +28,7 @@ void main() {
 
     test('should save and retrieve selected provider', () async {
       // Arrange
-      SharedPreferences.setMockInitialValues({});
+      // Mock already set up in setUp()
       
       // Act
       await settingsService.setSelectedProvider(LLMProvider.openai);
@@ -39,7 +40,7 @@ void main() {
 
     test('should save and retrieve API key for provider', () async {
       // Arrange
-      SharedPreferences.setMockInitialValues({});
+      // Mock already set up in setUp()
       const apiKey = 'test_api_key_123';
       
       // Act
@@ -52,7 +53,7 @@ void main() {
 
     test('should return empty string when API key not set', () async {
       // Arrange
-      SharedPreferences.setMockInitialValues({});
+      // Mock already set up in setUp()
       
       // Act
       final retrievedKey = await settingsService.getApiKey(LLMProvider.gemini);
@@ -63,7 +64,7 @@ void main() {
 
     test('should save different API keys for different providers', () async {
       // Arrange
-      SharedPreferences.setMockInitialValues({});
+      // Mock already set up in setUp()
       const grokKey = 'grok_key';
       const openaiKey = 'openai_key';
       const geminiKey = 'gemini_key';
@@ -81,6 +82,44 @@ void main() {
       expect(retrievedGrokKey, grokKey);
       expect(retrievedOpenaiKey, openaiKey);
       expect(retrievedGeminiKey, geminiKey);
+    });
+
+    test('should handle saving settings without plugin exception', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      const testApiKey = 'test_key_xyz';
+      
+      // Act - This should not throw a MissingPluginException
+      await settingsService.setSelectedProvider(LLMProvider.gemini);
+      await settingsService.setApiKey(LLMProvider.gemini, testApiKey);
+      
+      // Assert
+      final provider = await settingsService.getSelectedProvider();
+      final apiKey = await settingsService.getApiKey(LLMProvider.gemini);
+      
+      expect(provider, LLMProvider.gemini);
+      expect(apiKey, testApiKey);
+    });
+
+    test('should persist settings across multiple operations', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act - Multiple save operations
+      await settingsService.setSelectedProvider(LLMProvider.openai);
+      await settingsService.setApiKey(LLMProvider.openai, 'key1');
+      
+      await settingsService.setSelectedProvider(LLMProvider.grok);
+      await settingsService.setApiKey(LLMProvider.grok, 'key2');
+      
+      // Assert - Both should be retrievable
+      final grokKey = await settingsService.getApiKey(LLMProvider.grok);
+      final openaiKey = await settingsService.getApiKey(LLMProvider.openai);
+      final currentProvider = await settingsService.getSelectedProvider();
+      
+      expect(currentProvider, LLMProvider.grok);
+      expect(grokKey, 'key2');
+      expect(openaiKey, 'key1');
     });
   });
 }
