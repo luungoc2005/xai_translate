@@ -30,7 +30,7 @@ extension LLMProviderExtension on LLMProvider {
   String get model {
     switch (this) {
       case LLMProvider.grok:
-        return 'grok-4-fast';
+        return 'grok-4-fast-non-reasoning';
       case LLMProvider.openai:
         return 'gpt-5-mini-2025-08-07';
       case LLMProvider.gemini:

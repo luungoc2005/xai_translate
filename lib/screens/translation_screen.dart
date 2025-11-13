@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models/llm_provider.dart';
+import '../models/regional_preference.dart';
+import '../models/translation_history_item.dart';
 import '../services/translation_service.dart';
 import '../services/settings_service.dart';
+import '../services/history_service.dart';
+import '../services/stats_service.dart';
 import 'settings_screen.dart';
+import 'history_screen.dart';
+import 'stats_screen.dart';
 
 class TranslationScreen extends StatefulWidget {
   const TranslationScreen({super.key});
@@ -16,13 +22,32 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final TextEditingController _targetController = TextEditingController();
   final TranslationService _translationService = TranslationService();
   final SettingsService _settingsService = SettingsService();
+  final HistoryService _historyService = HistoryService();
+  final StatsService _statsService = StatsService();
   
-  String _sourceLanguage = 'English';
+  String _sourceLanguage = 'Auto-detect';
   String _targetLanguage = 'Spanish';
   bool _isLoading = false;
   String _errorMessage = '';
+  String _translationResult = '';
 
-  final List<String> _languages = [
+  final List<String> _sourceLanguages = [
+    'Auto-detect',
+    'English',
+    'Spanish',
+    'French',
+    'German',
+    'Italian',
+    'Portuguese',
+    'Russian',
+    'Japanese',
+    'Chinese',
+    'Korean',
+    'Arabic',
+    'Hindi',
+  ];
+
+  final List<String> _targetLanguages = [
     'English',
     'Spanish',
     'French',
@@ -54,6 +79,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     try {
       final provider = await _settingsService.getSelectedProvider();
       final apiKey = await _settingsService.getApiKey(provider);
+      final regionalPreference = await _settingsService.getRegionalPreference();
 
       if (apiKey.isEmpty) {
         setState(() {
@@ -63,15 +89,34 @@ class _TranslationScreenState extends State<TranslationScreen> {
         return;
       }
 
-      final translation = await _translationService.translate(
+      final result = await _translationService.translateWithStats(
         text: _sourceController.text,
+        sourceLanguage: _sourceLanguage,
         targetLanguage: _targetLanguage,
         provider: provider,
         apiKey: apiKey,
+        regionalPreference: regionalPreference,
       );
+
+      final translation = result['translation'] as String;
+      final stats = result['stats'];
+
+      // Save to history
+      final historyItem = TranslationHistoryItem(
+        sourceText: _sourceController.text,
+        translatedText: translation,
+        sourceLanguage: _sourceLanguage,
+        targetLanguage: _targetLanguage,
+        timestamp: DateTime.now(),
+      );
+      await _historyService.addToHistory(historyItem);
+
+      // Save stats
+      await _statsService.addStats(stats);
 
       setState(() {
         _targetController.text = translation;
+        _translationResult = translation;
         _isLoading = false;
       });
     } catch (e) {
@@ -83,6 +128,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
   }
 
   void _swapLanguages() {
+    // Don't swap if source is Auto-detect
+    if (_sourceLanguage == 'Auto-detect') {
+      return;
+    }
+    
     setState(() {
       final temp = _sourceLanguage;
       _sourceLanguage = _targetLanguage;
@@ -91,7 +141,46 @@ class _TranslationScreenState extends State<TranslationScreen> {
       final tempText = _sourceController.text;
       _sourceController.text = _targetController.text;
       _targetController.text = tempText;
+      _translationResult = tempText;
     });
+  }
+
+  List<TextSpan> _buildFormattedTranslation(String text) {
+    final List<TextSpan> spans = [];
+    final tnPattern = RegExp(r'\(T/N:[^)]+\)');
+    
+    int lastIndex = 0;
+    for (final match in tnPattern.allMatches(text)) {
+      // Add normal text before T/N
+      if (match.start > lastIndex) {
+        spans.add(TextSpan(
+          text: text.substring(lastIndex, match.start),
+          style: const TextStyle(fontSize: 16, color: Colors.black87),
+        ));
+      }
+      
+      // Add T/N with faded, smaller style
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: TextStyle(
+          fontSize: 13,
+          color: Colors.grey.shade600,
+          fontStyle: FontStyle.italic,
+        ),
+      ));
+      
+      lastIndex = match.end;
+    }
+    
+    // Add remaining text after last T/N
+    if (lastIndex < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastIndex),
+        style: const TextStyle(fontSize: 16, color: Colors.black87),
+      ));
+    }
+    
+    return spans;
   }
 
   @override
@@ -101,6 +190,26 @@ class _TranslationScreenState extends State<TranslationScreen> {
         title: const Text('AI Translate'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.bar_chart),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const StatsScreen()),
+              );
+            },
+            tooltip: 'Statistics',
+          ),
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HistoryScreen()),
+              );
+            },
+            tooltip: 'Translation History',
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
               Navigator.push(
@@ -108,6 +217,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
+            tooltip: 'Settings',
           ),
         ],
       ),
@@ -123,7 +233,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   child: DropdownButton<String>(
                     value: _sourceLanguage,
                     isExpanded: true,
-                    items: _languages.map((String language) {
+                    items: _sourceLanguages.map((String language) {
                       return DropdownMenuItem<String>(
                         value: language,
                         child: Text(language),
@@ -146,7 +256,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   child: DropdownButton<String>(
                     value: _targetLanguage,
                     isExpanded: true,
-                    items: _languages.map((String language) {
+                    items: _targetLanguages.map((String language) {
                       return DropdownMenuItem<String>(
                         value: language,
                         child: Text(language),
@@ -205,17 +315,24 @@ class _TranslationScreenState extends State<TranslationScreen> {
             const SizedBox(height: 16),
             // Target text field
             Expanded(
-              child: TextField(
-                controller: _targetController,
-                maxLines: null,
-                expands: true,
-                readOnly: true,
-                textAlignVertical: TextAlignVertical.top,
-                decoration: InputDecoration(
-                  hintText: 'Translation will appear here',
-                  border: const OutlineInputBorder(),
-                  filled: true,
-                  fillColor: Colors.blue[50],
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.blue[50],
+                ),
+                child: SingleChildScrollView(
+                  child: _translationResult.isEmpty
+                      ? Text(
+                          'Translation will appear here',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        )
+                      : RichText(
+                          text: TextSpan(
+                            children: _buildFormattedTranslation(_translationResult),
+                          ),
+                        ),
                 ),
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:mockito/annotations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xai_translate/services/settings_service.dart';
 import 'package:xai_translate/models/llm_provider.dart';
+import 'package:xai_translate/models/regional_preference.dart';
 
 @GenerateMocks([SharedPreferences])
 void main() {
@@ -120,6 +121,45 @@ void main() {
       expect(currentProvider, LLMProvider.grok);
       expect(grokKey, 'key2');
       expect(openaiKey, 'key1');
+    });
+
+    test('should return None as default regional preference', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      final preference = await settingsService.getRegionalPreference();
+
+      // Assert
+      expect(preference, RegionalPreference.none);
+    });
+
+    test('should save and retrieve regional preference', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setRegionalPreference(RegionalPreference.singapore);
+      final preference = await settingsService.getRegionalPreference();
+
+      // Assert
+      expect(preference, RegionalPreference.singapore);
+    });
+
+    test('should handle switching between regional preferences', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setRegionalPreference(RegionalPreference.singapore);
+      var preference = await settingsService.getRegionalPreference();
+      expect(preference, RegionalPreference.singapore);
+      
+      await settingsService.setRegionalPreference(RegionalPreference.none);
+      preference = await settingsService.getRegionalPreference();
+
+      // Assert
+      expect(preference, RegionalPreference.none);
     });
   });
 }

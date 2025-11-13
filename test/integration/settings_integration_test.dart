@@ -25,9 +25,11 @@ void main() {
       await tester.enterText(grokKeyField.first, 'test_grok_api_key');
       await tester.pump();
 
-      // Tap save button
+      // Scroll to save button and tap it
       final saveButton = find.widgetWithText(ElevatedButton, 'Save Settings');
       expect(saveButton, findsOneWidget);
+      await tester.ensureVisible(saveButton);
+      await tester.pumpAndSettle();
       
       await tester.tap(saveButton);
       await tester.pump();
@@ -35,6 +37,9 @@ void main() {
 
       // Assert - Should show success message
       expect(find.text('Settings saved successfully'), findsOneWidget);
+      
+      // Wait for navigation timer
+      await tester.pump(const Duration(milliseconds: 500));
     });
 
     testWidgets('should persist provider selection across saves',
@@ -48,8 +53,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // Act - Change provider dropdown
-      final dropdown = find.byType(DropdownButton<String>);
+      // Act - Change provider dropdown (first one is LLM Provider)
+      final dropdown = find.byType(DropdownButton<String>).first;
       expect(dropdown, findsOneWidget);
       
       await tester.tap(dropdown);
@@ -61,12 +66,17 @@ void main() {
 
       // Save settings
       final saveButton = find.widgetWithText(ElevatedButton, 'Save Settings');
+      await tester.ensureVisible(saveButton);
+      await tester.pumpAndSettle();
       await tester.tap(saveButton);
       await tester.pump();
       await tester.pump();
 
       // Assert - Should save without exception
       expect(find.text('Settings saved successfully'), findsOneWidget);
+      
+      // Wait for navigation timer
+      await tester.pump(const Duration(milliseconds: 500));
     });
 
     testWidgets('should handle saving multiple API keys without exception',
@@ -95,12 +105,17 @@ void main() {
 
       // Save
       final saveButton = find.widgetWithText(ElevatedButton, 'Save Settings');
+      await tester.ensureVisible(saveButton);
+      await tester.pumpAndSettle();
       await tester.tap(saveButton);
       await tester.pump();
       await tester.pump();
 
       // Assert - No exception, success message shown
       expect(find.text('Settings saved successfully'), findsOneWidget);
+      
+      // Wait for navigation timer
+      await tester.pump(const Duration(milliseconds: 500));
     });
 
     testWidgets('should handle save failure gracefully',
@@ -116,12 +131,17 @@ void main() {
 
       // Act - Try to save (should work in test environment)
       final saveButton = find.widgetWithText(ElevatedButton, 'Save Settings');
+      await tester.ensureVisible(saveButton);
+      await tester.pumpAndSettle();
       await tester.tap(saveButton);
       await tester.pump();
       await tester.pump();
 
       // Assert - Should not crash, should show some feedback
       expect(find.byType(SnackBar), findsOneWidget);
+      
+      // Wait for navigation timer
+      await tester.pump(const Duration(milliseconds: 500));
     });
   });
 }

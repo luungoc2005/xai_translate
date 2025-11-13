@@ -30,7 +30,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('LLM Provider'), findsOneWidget);
-      expect(find.byType(DropdownButton<String>), findsOneWidget);
+      expect(find.byType(DropdownButton<String>), findsAtLeastNWidgets(1));
     });
 
     testWidgets('should display API key input fields', (WidgetTester tester) async {
