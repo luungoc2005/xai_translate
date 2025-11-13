@@ -9,6 +9,8 @@ import '../models/translation_stats.dart';
 class TranslationService {
   final http.Client client;
 
+  static const String _systemPrompt = 'You are a professional language translator. Translate the given text, image or photo to the target language. Only respond with the translated text, nothing else.';
+
   TranslationService({http.Client? client}) : client = client ?? http.Client();
 
   /// Converts technical exceptions into user-friendly error messages
@@ -70,9 +72,9 @@ class TranslationService {
     if (isImageTranslation) {
       // For image translation, we ask the model to translate any text in the image
       if (text.isEmpty) {
-        instruction = 'Translate all text visible in the following image to $targetLanguage.';
+        instruction = 'Translate this image to $targetLanguage.';
       } else {
-        instruction = 'Translate all text visible in the following image to $targetLanguage. Additional context: $text';
+        instruction = 'Translate this image to $targetLanguage. Additional context: $text';
       }
     } else {
       if (sourceLanguage == null || sourceLanguage == 'Auto-detect') {
@@ -280,12 +282,6 @@ class TranslationService {
       // Build the user message content
       List<Map<String, dynamic>> contentParts = [];
       
-      // Add text instruction
-      contentParts.add({
-        'type': 'text',
-        'text': translationInstruction,
-      });
-      
       if (image != null) {
         // Scale and add image as base64
         final imageBytes = await _scaleImageIfNeeded(image);
@@ -305,6 +301,12 @@ class TranslationService {
         });
       }
       
+      // Add text instruction
+      contentParts.add({
+        'type': 'text',
+        'text': translationInstruction,
+      });
+      
       final response = await client.post(
         url,
         headers: {
@@ -316,7 +318,7 @@ class TranslationService {
           'messages': [
             {
               'role': 'system',
-              'content': 'You are a professional language translator. Translate the given text, image or photo to the target language. Only respond with the translated text, nothing else.',
+              'content': _systemPrompt,
             },
             {
               'role': 'user',
@@ -346,10 +348,10 @@ class TranslationService {
     File? image,
   }) async {
     try {
-      final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}?key=$apiKey');
+      final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}/${LLMProvider.gemini.model}:generateContent?key=$apiKey');
       
       // Build translation instruction using centralized prompt function
-      final translationInstruction = 'You are a professional translator. Translate the given text or image to the target language. Only respond with the translated text, nothing else.\n\n${_buildTranslationPrompt(
+      final translationInstruction = '$_systemPrompt\n\n${_buildTranslationPrompt(
         text: text,
         sourceLanguage: sourceLanguage,
         targetLanguage: targetLanguage,

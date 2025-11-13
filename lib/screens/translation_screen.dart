@@ -24,13 +24,14 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final TextEditingController _sourceController = TextEditingController();
   final TextEditingController _targetController = TextEditingController();
   final FocusNode _sourceFocusNode = FocusNode();
+  final FocusNode _targetFocusNode = FocusNode();
   final TranslationService _translationService = TranslationService();
   final SettingsService _settingsService = SettingsService();
   final HistoryService _historyService = HistoryService();
   final StatsService _statsService = StatsService();
   final VoiceInputService _voiceInputService = VoiceInputService();
   final ImagePicker _imagePicker = ImagePicker();
-  
+
   String _sourceLanguage = 'Auto-detect';
   String _targetLanguage = 'English';
   bool _isLoading = false;
@@ -42,6 +43,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   double _recordingAmplitude = 0.0;
   Stream<double>? _amplitudeStream;
   bool _isInputFocused = false;
+  bool _isOutputFocused = false;
   File? _selectedImage;
   late Stream<List<SharedMediaFile>> _sharedFilesStream;
 
@@ -83,9 +85,20 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _sourceFocusNode.addListener(() {
       setState(() {
         _isInputFocused = _sourceFocusNode.hasFocus;
+        if (_isInputFocused) {
+          _isOutputFocused = false;
+        }
       });
     });
-    
+    _targetFocusNode.addListener(() {
+      setState(() {
+        _isOutputFocused = _targetFocusNode.hasFocus;
+        if (_isOutputFocused) {
+          _isInputFocused = false;
+        }
+      });
+    });
+
     // Listen for shared files when app is already running
     _sharedFilesStream = ReceiveSharingIntent.instance.getMediaStream();
     _sharedFilesStream.listen((List<SharedMediaFile> files) {
@@ -93,15 +106,17 @@ class _TranslationScreenState extends State<TranslationScreen> {
         _handleSharedImage(files.first.path);
       }
     });
-    
+
     // Check for shared files when app is opened from share
-    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> files) {
+    ReceiveSharingIntent.instance.getInitialMedia().then((
+      List<SharedMediaFile> files,
+    ) {
       if (files.isNotEmpty) {
         _handleSharedImage(files.first.path);
       }
     });
   }
-  
+
   void _handleSharedImage(String imagePath) {
     setState(() {
       _selectedImage = File(imagePath);
@@ -112,16 +127,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
   Future<void> _loadSavedLanguages() async {
     final sourceLanguage = await _settingsService.getSourceLanguage();
     final targetLanguage = await _settingsService.getTargetLanguage();
-    
+
     setState(() {
       _sourceLanguage = sourceLanguage;
       _targetLanguage = targetLanguage;
     });
   }
-  
+
   Future<void> _pickImageFromGallery() async {
     try {
-      final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+      );
       if (image != null) {
         setState(() {
           _selectedImage = File(image.path);
@@ -134,10 +151,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
       });
     }
   }
-  
+
   Future<void> _pickImageFromCamera() async {
     try {
-      final XFile? image = await _imagePicker.pickImage(source: ImageSource.camera);
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+      );
       if (image != null) {
         setState(() {
           _selectedImage = File(image.path);
@@ -150,7 +169,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       });
     }
   }
-  
+
   void _removeImage() {
     setState(() {
       _selectedImage = null;
@@ -178,7 +197,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       if (apiKey.isEmpty) {
         setState(() {
-          _errorMessage = 'Please set your ${provider.name} API key in settings';
+          _errorMessage =
+              'Please set your ${provider.name} API key in settings';
           _isLoading = false;
         });
         return;
@@ -199,7 +219,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       // Save to history
       final historyItem = TranslationHistoryItem(
-        sourceText: _selectedImage != null 
+        sourceText: _selectedImage != null
             ? '[Image] ${_sourceController.text.isEmpty ? "Image translation" : _sourceController.text}'
             : _sourceController.text,
         translatedText: translation,
@@ -237,7 +257,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       });
 
       await _voiceInputService.startRecording();
-      
+
       // Listen to amplitude for volume visualization
       _amplitudeStream = _voiceInputService.getAmplitudeStream();
       _amplitudeStream?.listen((amplitude) {
@@ -245,7 +265,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
           _recordingAmplitude = amplitude;
         });
       });
-      
+
       // Update UI to show recording state
       setState(() {});
     } catch (e) {
@@ -270,17 +290,21 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _currentRecordingPath = await _voiceInputService.stopRecording();
 
       // Check if Whisper model is available
-      final isModelAvailable = await _voiceInputService.isWhisperModelAvailable();
+      final isModelAvailable = await _voiceInputService
+          .isWhisperModelAvailable();
       if (!isModelAvailable) {
         setState(() {
           _isTranscribing = false;
-          _errorMessage = 'Whisper model not available. Please download a model file and place it in app documents/whisper/ directory. See VOICE_INPUT_SETUP.md for details.';
+          _errorMessage =
+              'Whisper model not available. Please download a model file and place it in app documents/whisper/ directory. See VOICE_INPUT_SETUP.md for details.';
         });
         return;
       }
 
       // Transcribe audio
-      final transcription = await _voiceInputService.transcribeAudio(_currentRecordingPath!);
+      final transcription = await _voiceInputService.transcribeAudio(
+        _currentRecordingPath!,
+      );
 
       // Update source text with transcription
       setState(() {
@@ -316,7 +340,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     if (_sourceLanguage == 'Auto-detect') {
       return;
     }
-    
+
     setState(() {
       final temp = _sourceLanguage;
       _sourceLanguage = _targetLanguage;
@@ -336,38 +360,44 @@ class _TranslationScreenState extends State<TranslationScreen> {
   List<TextSpan> _buildFormattedTranslation(String text) {
     final List<TextSpan> spans = [];
     final tnPattern = RegExp(r'\(T/N:[^)]+\)');
-    
+
     int lastIndex = 0;
     for (final match in tnPattern.allMatches(text)) {
       // Add normal text before T/N
       if (match.start > lastIndex) {
-        spans.add(TextSpan(
-          text: text.substring(lastIndex, match.start),
-          style: const TextStyle(fontSize: 18, color: Colors.black87),
-        ));
+        spans.add(
+          TextSpan(
+            text: text.substring(lastIndex, match.start),
+            style: const TextStyle(fontSize: 18, color: Colors.black87),
+          ),
+        );
       }
-      
+
       // Add T/N with faded, smaller style
-      spans.add(TextSpan(
-        text: match.group(0),
-        style: TextStyle(
-          fontSize: 14,
-          color: Colors.grey.shade600,
-          fontStyle: FontStyle.italic,
+      spans.add(
+        TextSpan(
+          text: match.group(0),
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey.shade600,
+            fontStyle: FontStyle.italic,
+          ),
         ),
-      ));
-      
+      );
+
       lastIndex = match.end;
     }
-    
+
     // Add remaining text after last T/N
     if (lastIndex < text.length) {
-      spans.add(TextSpan(
-        text: text.substring(lastIndex),
-        style: const TextStyle(fontSize: 18, color: Colors.black87),
-      ));
+      spans.add(
+        TextSpan(
+          text: text.substring(lastIndex),
+          style: const TextStyle(fontSize: 18, color: Colors.black87),
+        ),
+      );
     }
-    
+
     return spans;
   }
 
@@ -412,343 +442,439 @@ class _TranslationScreenState extends State<TranslationScreen> {
       body: Column(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Language selection row
-                  Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Calculate available height
+                final availableHeight = constraints.maxHeight;
+
+                // Fixed heights
+                const languageRowHeight = 60.0;
+                const imageButtonsHeight = 48.0;
+                const spacing = 16.0;
+
+                // Image height when present
+                final imageHeight = _selectedImage != null
+                    ? 200.0 + spacing
+                    : 0.0;
+
+                // Calculate remaining height for text fields
+                var remainingHeight =
+                    availableHeight -
+                    languageRowHeight -
+                    imageButtonsHeight -
+                    (spacing * 5); // spacing between elements
+
+                if (_selectedImage != null) {
+                  remainingHeight -= imageHeight;
+                }
+
+                // Dynamic heights based on focus and content state
+                double inputHeight;
+                double outputHeight;
+
+                if (_translationResult.isEmpty) {
+                  // No translation yet - give all space to input
+                  inputHeight = remainingHeight;
+                  outputHeight = 0;
+                } else if (_isInputFocused) {
+                  // Input focused - give more space to input
+                  inputHeight = remainingHeight * 0.55;
+                  outputHeight = remainingHeight * 0.45;
+                } else if (_isOutputFocused) {
+                  // Output focused - give more space to output
+                  inputHeight = remainingHeight * 0.35;
+                  outputHeight = remainingHeight * 0.65;
+                } else if (_selectedImage != null) {
+                  // Image selected - smaller input, normal output
+                  inputHeight = remainingHeight * 0.35;
+                  outputHeight = remainingHeight * 0.65;
+                } else {
+                  // Default balanced split
+                  inputHeight = remainingHeight * 0.5;
+                  outputHeight = remainingHeight * 0.5;
+                }
+
+                // Minimum heights
+                inputHeight = inputHeight.clamp(100.0, double.infinity);
+                if (_translationResult.isNotEmpty) {
+                  outputHeight = outputHeight.clamp(100.0, double.infinity);
+                }
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: DropdownButton<String>(
-                          value: _sourceLanguage,
-                          isExpanded: true,
-                          items: _sourceLanguages.map((String language) {
-                            return DropdownMenuItem<String>(
-                              value: language,
-                              child: Text(language),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) async {
-                            if (newValue != null) {
-                              setState(() {
-                                _sourceLanguage = newValue;
-                              });
-                              await _settingsService.setSourceLanguage(newValue);
-                            }
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.swap_horiz),
-                        onPressed: _swapLanguages,
-                      ),
-                      Expanded(
-                        child: DropdownButton<String>(
-                          value: _targetLanguage,
-                          isExpanded: true,
-                          items: _targetLanguages.map((String language) {
-                            return DropdownMenuItem<String>(
-                              value: language,
-                              child: Text(language),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) async {
-                            if (newValue != null) {
-                              setState(() {
-                                _targetLanguage = newValue;
-                              });
-                              await _settingsService.setTargetLanguage(newValue);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Image picker buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickImageFromGallery,
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Pick from Gallery'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickImageFromCamera,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Take Photo'),
-                  ),
-                ),
-              ],
-            ),
-                  // Display selected image
-                  if (_selectedImage != null) ...[
-                    const SizedBox(height: 16),
-                    Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            _selectedImage!,
-                            height: 200,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: CircleAvatar(
-                            backgroundColor: Colors.red,
-                            child: IconButton(
-                              icon: const Icon(Icons.close, color: Colors.white, size: 20),
-                              onPressed: _removeImage,
+                      // Language selection row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButton<String>(
+                              value: _sourceLanguage,
+                              isExpanded: true,
+                              items: _sourceLanguages.map((String language) {
+                                return DropdownMenuItem<String>(
+                                  value: language,
+                                  child: Text(language),
+                                );
+                              }).toList(),
+                              onChanged: (String? newValue) async {
+                                if (newValue != null) {
+                                  setState(() {
+                                    _sourceLanguage = newValue;
+                                  });
+                                  await _settingsService.setSourceLanguage(
+                                    newValue,
+                                  );
+                                }
+                              },
                             ),
                           ),
+                          IconButton(
+                            icon: const Icon(Icons.swap_horiz),
+                            onPressed: _swapLanguages,
+                          ),
+                          Expanded(
+                            child: DropdownButton<String>(
+                              value: _targetLanguage,
+                              isExpanded: true,
+                              items: _targetLanguages.map((String language) {
+                                return DropdownMenuItem<String>(
+                                  value: language,
+                                  child: Text(language),
+                                );
+                              }).toList(),
+                              onChanged: (String? newValue) async {
+                                if (newValue != null) {
+                                  setState(() {
+                                    _targetLanguage = newValue;
+                                  });
+                                  await _settingsService.setTargetLanguage(
+                                    newValue,
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Image picker buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _pickImageFromGallery,
+                              icon: const Icon(Icons.photo_library),
+                              label: const Text('Pick from Gallery'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _pickImageFromCamera,
+                              icon: const Icon(Icons.camera_alt),
+                              label: const Text('Take Photo'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Display selected image
+                      if (_selectedImage != null) ...[
+                        const SizedBox(height: 16),
+                        Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                _selectedImage!,
+                                height: 200,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: CircleAvatar(
+                                backgroundColor: Colors.red,
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  onPressed: _removeImage,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  // Source text field with voice input
-                  Container(
-                    height: _translationResult.isEmpty 
-                        ? 400
-                        : _isInputFocused 
-                            ? 250
-                            : 150,
-                    child: Stack(
-                children: [
-                  TextField(
-                    controller: _sourceController,
-                    focusNode: _sourceFocusNode,
-                    enabled: !_isRecording && !_isTranscribing,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    style: const TextStyle(fontSize: 18),
-                    decoration: InputDecoration(
-                      hintText: _isRecording 
-                          ? 'Recording... Speak now' 
-                          : _isTranscribing 
-                              ? 'Processing audio...'
-                              : _selectedImage != null
-                                  ? 'Optional: Add context for the image'
-                                  : 'Enter text, pick an image, or use voice input',
-                      border: const OutlineInputBorder(),
-                      filled: true,
-                      fillColor: _isRecording || _isTranscribing ? Colors.grey[200] : Colors.grey[100],
-                    ),
-                  ),
-                  // Volume indicator during recording
-                  if (_isRecording)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red, width: 2),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                      const SizedBox(height: 16),
+                      // Source text field with voice input
+                      SizedBox(
+                        height: inputHeight,
+                        child: Stack(
                           children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.mic, color: Colors.red, size: 20),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Recording...',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const Spacer(),
-                                // Pulsing red dot
-                                Container(
-                                  width: 12,
-                                  height: 12,
+                            TextField(
+                              controller: _sourceController,
+                              focusNode: _sourceFocusNode,
+                              enabled: !_isRecording && !_isTranscribing,
+                              maxLines: null,
+                              expands: true,
+                              textAlignVertical: TextAlignVertical.top,
+                              style: const TextStyle(fontSize: 18),
+                              decoration: InputDecoration(
+                                hintText: _isRecording
+                                    ? 'Recording... Speak now'
+                                    : _isTranscribing
+                                    ? 'Processing audio...'
+                                    : _selectedImage != null
+                                    ? 'Optional: Add context for the image'
+                                    : 'Enter text, pick an image, or use voice input',
+                                border: const OutlineInputBorder(),
+                                filled: true,
+                                fillColor: _isRecording || _isTranscribing
+                                    ? Colors.grey[200]
+                                    : Colors.grey[100],
+                              ),
+                            ),
+                            // Volume indicator during recording
+                            if (_isRecording)
+                              Positioned(
+                                top: 8,
+                                left: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.red.withOpacity(0.5),
-                                        blurRadius: 8,
-                                        spreadRadius: 2,
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.mic,
+                                            color: Colors.red,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Text(
+                                            'Recording...',
+                                            style: TextStyle(
+                                              color: Colors.red,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          // Pulsing red dot
+                                          Container(
+                                            width: 12,
+                                            height: 12,
+                                            decoration: BoxDecoration(
+                                              color: Colors.red,
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.red.withOpacity(
+                                                    0.5,
+                                                  ),
+                                                  blurRadius: 8,
+                                                  spreadRadius: 2,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      // Volume indicator bar
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: LinearProgressIndicator(
+                                          value: _recordingAmplitude.clamp(
+                                            0.0,
+                                            1.0,
+                                          ),
+                                          minHeight: 6,
+                                          backgroundColor: Colors.grey[300],
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                _recordingAmplitude > 0.7
+                                                    ? Colors.red
+                                                    : _recordingAmplitude > 0.4
+                                                    ? Colors.orange
+                                                    : Colors.green,
+                                              ),
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ],
+                              ),
+                            // Processing indicator during transcription
+                            if (_isTranscribing)
+                              Positioned(
+                                top: 8,
+                                left: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.blue,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.blue,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Processing audio with Whisper...',
+                                        style: TextStyle(
+                                          color: Colors.blue,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // Voice input button
+                            Positioned(
+                              bottom: 8,
+                              right: 8,
+                              child: FloatingActionButton(
+                                mini: true,
+                                onPressed: _isRecording
+                                    ? _stopVoiceInput
+                                    : _startVoiceInput,
+                                backgroundColor: _isRecording
+                                    ? Colors.red
+                                    : Colors.blue,
+                                child: _isTranscribing
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Icon(
+                                        _isRecording ? Icons.stop : Icons.mic,
+                                        color: Colors.white,
+                                      ),
+                              ),
                             ),
-                            const SizedBox(height: 8),
-                            // Volume indicator bar
-                            ClipRRect(
+                          ],
+                        ),
+                      ),
+                      if (_translationResult.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        // Output text field
+                        SizedBox(
+                          height: outputHeight,
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade400),
                               borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: _recordingAmplitude.clamp(0.0, 1.0),
-                                minHeight: 6,
-                                backgroundColor: Colors.grey[300],
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  _recordingAmplitude > 0.7 
-                                      ? Colors.red 
-                                      : _recordingAmplitude > 0.4 
-                                          ? Colors.orange 
-                                          : Colors.green,
+                              color: Colors.blue[50],
+                            ),
+                            child: SingleChildScrollView(
+                              child: GestureDetector(
+                                onTap: () {
+                                  _targetFocusNode.requestFocus();
+                                },
+                                child: SelectableText.rich(
+                                  TextSpan(
+                                    children: _buildFormattedTranslation(
+                                      _translationResult,
+                                    ),
+                                  ),
+                                  focusNode: _targetFocusNode,
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                  // Processing indicator during transcription
-                  if (_isTranscribing)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue, width: 2),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Processing audio with Whisper...',
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Translate button
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _translate,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Translate', style: TextStyle(fontSize: 16)),
+                ),
+                if (_errorMessage.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Card(
+                    color: Colors.red.shade50,
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.red.shade700),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _errorMessage,
                               style: TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade900,
+                                fontSize: 14,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ),
-                  // Voice input button
-                  Positioned(
-                    bottom: 8,
-                    right: 8,
-                    child: FloatingActionButton(
-                      mini: true,
-                      onPressed: _isRecording ? _stopVoiceInput : _startVoiceInput,
-                      backgroundColor: _isRecording ? Colors.red : Colors.blue,
-                      child: _isTranscribing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Icon(
-                              _isRecording ? Icons.stop : Icons.mic,
-                              color: Colors.white,
-                            ),
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-            const SizedBox(height: 16),
-            if (_translationResult.isNotEmpty)
-              Container(
-                height: _isInputFocused 
-                    ? 200
-                    : 350,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
-                  borderRadius: BorderRadius.circular(4),
-                  color: Colors.blue[50],
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText.rich(
-                    TextSpan(
-                      children: _buildFormattedTranslation(_translationResult),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    ),
-    Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Translate button
-          ElevatedButton(
-            onPressed: _isLoading ? null : _translate,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Translate', style: TextStyle(fontSize: 16)),
           ),
-          if (_errorMessage.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Card(
-              color: Colors.red.shade50,
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.red.shade700),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _errorMessage,
-                        style: TextStyle(
-                          color: Colors.red.shade900,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
         ],
       ),
-    ),
-  ],
-),
     );
   }
 
@@ -757,6 +883,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _sourceController.dispose();
     _targetController.dispose();
     _sourceFocusNode.dispose();
+    _targetFocusNode.dispose();
     _voiceInputService.dispose();
     super.dispose();
   }
