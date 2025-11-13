@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../models/llm_provider.dart';
 import '../models/translation_history_item.dart';
 import '../services/translation_service.dart';
@@ -9,6 +10,7 @@ import '../services/settings_service.dart';
 import '../services/history_service.dart';
 import '../services/stats_service.dart';
 import '../services/voice_input_service.dart';
+import '../services/tts_service.dart';
 import 'settings_screen.dart';
 import 'history_screen.dart';
 import 'stats_screen.dart';
@@ -30,6 +32,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final HistoryService _historyService = HistoryService();
   final StatsService _statsService = StatsService();
   final VoiceInputService _voiceInputService = VoiceInputService();
+  final TTSService _ttsService = TTSService();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   final ImagePicker _imagePicker = ImagePicker();
 
   String _sourceLanguage = 'Auto-detect';
@@ -46,6 +50,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
   bool _isOutputFocused = false;
   File? _selectedImage;
   late Stream<List<SharedMediaFile>> _sharedFilesStream;
+  bool _isGeneratingTTS = false;
+  bool _isPlayingTTS = false;
 
   final List<String> _sourceLanguages = [
     'Auto-detect',
@@ -791,31 +797,64 @@ class _TranslationScreenState extends State<TranslationScreen> {
                       ),
                       if (_translationResult.isNotEmpty) ...[
                         const SizedBox(height: 16),
-                        // Output text field
+                        // Output text field with TTS button
                         SizedBox(
                           height: outputHeight,
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade400),
-                              borderRadius: BorderRadius.circular(4),
-                              color: Colors.blue[50],
-                            ),
-                            child: SingleChildScrollView(
-                              child: GestureDetector(
-                                onTap: () {
-                                  _targetFocusNode.requestFocus();
-                                },
-                                child: SelectableText.rich(
-                                  TextSpan(
-                                    children: _buildFormattedTranslation(
-                                      _translationResult,
+                          child: Stack(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade400),
+                                  borderRadius: BorderRadius.circular(4),
+                                  color: Colors.blue[50],
+                                ),
+                                child: SingleChildScrollView(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      _targetFocusNode.requestFocus();
+                                    },
+                                    child: SelectableText.rich(
+                                      TextSpan(
+                                        children: _buildFormattedTranslation(
+                                          _translationResult,
+                                        ),
+                                      ),
+                                      focusNode: _targetFocusNode,
                                     ),
                                   ),
-                                  focusNode: _targetFocusNode,
                                 ),
                               ),
-                            ),
+                              // TTS button (only show if OpenAI key is configured)
+                              Positioned(
+                                bottom: 8,
+                                right: 8,
+                                child: FloatingActionButton(
+                                  mini: true,
+                                  onPressed: _isGeneratingTTS
+                                      ? null
+                                      : (_isPlayingTTS ? _stopTTS : _playTTS),
+                                  backgroundColor: _isPlayingTTS
+                                      ? Colors.orange
+                                      : Colors.blue,
+                                  child: _isGeneratingTTS
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : Icon(
+                                          _isPlayingTTS
+                                              ? Icons.stop
+                                              : Icons.volume_up,
+                                          color: Colors.white,
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -885,6 +924,76 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _sourceFocusNode.dispose();
     _targetFocusNode.dispose();
     _voiceInputService.dispose();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  /// Generate and play TTS for the translation output
+  Future<void> _playTTS() async {
+    if (_translationResult.isEmpty) {
+      return;
+    }
+
+    try {
+      setState(() {
+        _isGeneratingTTS = true;
+        _errorMessage = '';
+      });
+
+      // Get OpenAI API key and TTS voice setting
+      final apiKey = await _settingsService.getApiKey(LLMProvider.openai);
+      
+      if (apiKey.isEmpty) {
+        setState(() {
+          _errorMessage = 'Please set your OpenAI API key in settings to use text-to-speech';
+          _isGeneratingTTS = false;
+        });
+        return;
+      }
+
+      final voice = await _settingsService.getTTSVoice();
+
+      // Generate speech (truncate to OpenAI's 4096 character limit)
+      final textToSpeak = _translationResult.length > 4096
+          ? _translationResult.substring(0, 4096)
+          : _translationResult;
+      
+      final audioPath = await _ttsService.generateSpeech(
+        text: textToSpeak,
+        apiKey: apiKey,
+        voice: voice,
+      );
+
+      setState(() {
+        _isGeneratingTTS = false;
+        _isPlayingTTS = true;
+      });
+
+      // Play audio
+      await _audioPlayer.play(DeviceFileSource(audioPath));
+
+      // Listen for completion
+      _audioPlayer.onPlayerComplete.listen((_) {
+        if (mounted) {
+          setState(() {
+            _isPlayingTTS = false;
+          });
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isGeneratingTTS = false;
+        _isPlayingTTS = false;
+        _errorMessage = 'Text-to-speech failed: ${e.toString()}';
+      });
+    }
+  }
+
+  /// Stop TTS playback
+  Future<void> _stopTTS() async {
+    await _audioPlayer.stop();
+    setState(() {
+      _isPlayingTTS = false;
+    });
   }
 }

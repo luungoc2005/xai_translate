@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/llm_provider.dart';
 import '../models/regional_preference.dart';
+import '../models/tts_voice.dart';
 import '../services/settings_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   LLMProvider _selectedProvider = LLMProvider.grok;
   RegionalPreference _selectedRegionalPreference = RegionalPreference.none;
+  TTSVoice _selectedTTSVoice = TTSVoice.alloy;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -35,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final provider = await _settingsService.getSelectedProvider();
       final regionalPreference = await _settingsService.getRegionalPreference();
+      final ttsVoice = await _settingsService.getTTSVoice();
       final grokKey = await _settingsService.getApiKey(LLMProvider.grok);
       final openaiKey = await _settingsService.getApiKey(LLMProvider.openai);
       final geminiKey = await _settingsService.getApiKey(LLMProvider.gemini);
@@ -42,6 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _selectedProvider = provider;
         _selectedRegionalPreference = regionalPreference;
+        _selectedTTSVoice = ttsVoice;
         _grokKeyController.text = grokKey;
         _openaiKeyController.text = openaiKey;
         _geminiKeyController.text = geminiKey;
@@ -62,6 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await _settingsService.setSelectedProvider(_selectedProvider);
       await _settingsService.setRegionalPreference(_selectedRegionalPreference);
+      await _settingsService.setTTSVoice(_selectedTTSVoice);
       await _settingsService.setApiKey(LLMProvider.grok, _grokKeyController.text);
       await _settingsService.setApiKey(LLMProvider.openai, _openaiKeyController.text);
       await _settingsService.setApiKey(LLMProvider.gemini, _geminiKeyController.text);
@@ -249,6 +254,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       helperText: 'Get your API key from aistudio.google.com',
                     ),
                     obscureText: true,
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Text-to-Speech Settings',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Requires OpenAI API key',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<TTSVoice>(
+                    value: _selectedTTSVoice,
+                    decoration: const InputDecoration(
+                      labelText: 'Default Voice',
+                      border: OutlineInputBorder(),
+                      helperText: 'Select the voice for text-to-speech',
+                    ),
+                    items: TTSVoice.values.map((voice) {
+                      return DropdownMenuItem<TTSVoice>(
+                        value: voice,
+                        child: Text('${voice.name} - ${voice.description}'),
+                      );
+                    }).toList(),
+                    onChanged: (TTSVoice? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedTTSVoice = newValue;
+                        });
+                      }
+                    },
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(

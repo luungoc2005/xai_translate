@@ -93,6 +93,14 @@ class MockVoiceRecorder extends _i1.Mock implements _i2.VoiceRecorder {
           as bool);
 
   @override
+  _i3.Stream<double> getAmplitudeStream() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAmplitudeStream, []),
+            returnValue: _i3.Stream<double>.empty(),
+          )
+          as _i3.Stream<double>);
+
+  @override
   _i3.Future<void> dispose() =>
       (super.noSuchMethod(
             Invocation.method(#dispose, []),

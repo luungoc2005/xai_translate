@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xai_translate/services/settings_service.dart';
 import 'package:xai_translate/models/llm_provider.dart';
 import 'package:xai_translate/models/regional_preference.dart';
+import 'package:xai_translate/models/tts_voice.dart';
 
 @GenerateMocks([SharedPreferences])
 void main() {
@@ -246,6 +247,45 @@ void main() {
       // Assert
       expect(source, 'French');
       expect(target, 'Portuguese');
+    });
+
+    test('should return Alloy as default TTS voice', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      final voice = await settingsService.getTTSVoice();
+
+      // Assert
+      expect(voice, TTSVoice.alloy);
+    });
+
+    test('should save and retrieve TTS voice', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setTTSVoice(TTSVoice.nova);
+      final voice = await settingsService.getTTSVoice();
+
+      // Assert
+      expect(voice, TTSVoice.nova);
+    });
+
+    test('should handle changing TTS voice multiple times', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setTTSVoice(TTSVoice.shimmer);
+      var voice = await settingsService.getTTSVoice();
+      expect(voice, TTSVoice.shimmer);
+      
+      await settingsService.setTTSVoice(TTSVoice.onyx);
+      voice = await settingsService.getTTSVoice();
+
+      // Assert
+      expect(voice, TTSVoice.onyx);
     });
   });
 }

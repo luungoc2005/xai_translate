@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/llm_provider.dart';
 import '../models/regional_preference.dart';
+import '../models/tts_voice.dart';
 
 class SettingsService {
   static const String _providerKey = 'selected_provider';
@@ -8,6 +9,7 @@ class SettingsService {
   static const String _regionalPreferenceKey = 'regional_preference';
   static const String _sourceLanguageKey = 'source_language';
   static const String _targetLanguageKey = 'target_language';
+  static const String _ttsVoiceKey = 'tts_voice';
 
   Future<LLMProvider> getSelectedProvider() async {
     final prefs = await SharedPreferences.getInstance();
@@ -71,5 +73,21 @@ class SettingsService {
   Future<void> setTargetLanguage(String language) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_targetLanguageKey, language);
+  }
+
+  Future<TTSVoice> getTTSVoice() async {
+    final prefs = await SharedPreferences.getInstance();
+    final voiceString = prefs.getString(_ttsVoiceKey);
+    
+    if (voiceString == null) {
+      return TTSVoice.alloy; // Default voice
+    }
+    
+    return TTSVoiceExtension.fromString(voiceString);
+  }
+
+  Future<void> setTTSVoice(TTSVoice voice) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_ttsVoiceKey, voice.toString().split('.').last);
   }
 }
