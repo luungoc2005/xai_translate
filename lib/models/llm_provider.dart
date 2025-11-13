@@ -23,19 +23,24 @@ extension LLMProviderExtension on LLMProvider {
       case LLMProvider.openai:
         return 'https://api.openai.com/v1/chat/completions';
       case LLMProvider.gemini:
-        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
     }
   }
 
   String get model {
     switch (this) {
       case LLMProvider.grok:
-        return 'grok-4-fast-non-reasoning';
+        return 'grok-2-vision-1212';
       case LLMProvider.openai:
-        return 'gpt-5-mini-2025-08-07';
+        return 'gpt-4o';
       case LLMProvider.gemini:
-        return 'gemini-2.5-flash-image';
+        return 'gemini-2.0-flash-exp';
     }
+  }
+  
+  bool get supportsVision {
+    // All current models support vision
+    return true;
   }
 
   static LLMProvider fromString(String value) {

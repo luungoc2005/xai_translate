@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import '../models/llm_provider.dart';
-import '../models/regional_preference.dart';
 import '../models/translation_history_item.dart';
 import '../services/translation_service.dart';
 import '../services/settings_service.dart';
@@ -27,6 +29,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final HistoryService _historyService = HistoryService();
   final StatsService _statsService = StatsService();
   final VoiceInputService _voiceInputService = VoiceInputService();
+  final ImagePicker _imagePicker = ImagePicker();
   
   String _sourceLanguage = 'Auto-detect';
   String _targetLanguage = 'English';
@@ -39,6 +42,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
   double _recordingAmplitude = 0.0;
   Stream<double>? _amplitudeStream;
   bool _isInputFocused = false;
+  File? _selectedImage;
+  late Stream<List<SharedMediaFile>> _sharedFilesStream;
 
   final List<String> _sourceLanguages = [
     'Auto-detect',
@@ -80,6 +85,28 @@ class _TranslationScreenState extends State<TranslationScreen> {
         _isInputFocused = _sourceFocusNode.hasFocus;
       });
     });
+    
+    // Listen for shared files when app is already running
+    _sharedFilesStream = ReceiveSharingIntent.instance.getMediaStream();
+    _sharedFilesStream.listen((List<SharedMediaFile> files) {
+      if (files.isNotEmpty) {
+        _handleSharedImage(files.first.path);
+      }
+    });
+    
+    // Check for shared files when app is opened from share
+    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> files) {
+      if (files.isNotEmpty) {
+        _handleSharedImage(files.first.path);
+      }
+    });
+  }
+  
+  void _handleSharedImage(String imagePath) {
+    setState(() {
+      _selectedImage = File(imagePath);
+      _errorMessage = '';
+    });
   }
 
   Future<void> _loadSavedLanguages() async {
@@ -91,11 +118,49 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _targetLanguage = targetLanguage;
     });
   }
+  
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() {
+          _selectedImage = File(image.path);
+          _errorMessage = '';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to pick image: ${e.toString()}';
+      });
+    }
+  }
+  
+  Future<void> _pickImageFromCamera() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (image != null) {
+        setState(() {
+          _selectedImage = File(image.path);
+          _errorMessage = '';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to take photo: ${e.toString()}';
+      });
+    }
+  }
+  
+  void _removeImage() {
+    setState(() {
+      _selectedImage = null;
+    });
+  }
 
   Future<void> _translate() async {
-    if (_sourceController.text.isEmpty) {
+    if (_sourceController.text.isEmpty && _selectedImage == null) {
       setState(() {
-        _errorMessage = 'Please enter text to translate';
+        _errorMessage = 'Please enter text or select an image to translate';
       });
       return;
     }
@@ -126,6 +191,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
         provider: provider,
         apiKey: apiKey,
         regionalPreference: regionalPreference,
+        image: _selectedImage,
       );
 
       final translation = result['translation'] as String;
@@ -133,7 +199,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       // Save to history
       final historyItem = TranslationHistoryItem(
-        sourceText: _sourceController.text,
+        sourceText: _selectedImage != null 
+            ? '[Image] ${_sourceController.text.isEmpty ? "Image translation" : _sourceController.text}'
+            : _sourceController.text,
         translatedText: translation,
         sourceLanguage: _sourceLanguage,
         targetLanguage: _targetLanguage,
@@ -341,72 +409,121 @@ class _TranslationScreenState extends State<TranslationScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Language selection row
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Language selection row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButton<String>(
+                          value: _sourceLanguage,
+                          isExpanded: true,
+                          items: _sourceLanguages.map((String language) {
+                            return DropdownMenuItem<String>(
+                              value: language,
+                              child: Text(language),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) async {
+                            if (newValue != null) {
+                              setState(() {
+                                _sourceLanguage = newValue;
+                              });
+                              await _settingsService.setSourceLanguage(newValue);
+                            }
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.swap_horiz),
+                        onPressed: _swapLanguages,
+                      ),
+                      Expanded(
+                        child: DropdownButton<String>(
+                          value: _targetLanguage,
+                          isExpanded: true,
+                          items: _targetLanguages.map((String language) {
+                            return DropdownMenuItem<String>(
+                              value: language,
+                              child: Text(language),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) async {
+                            if (newValue != null) {
+                              setState(() {
+                                _targetLanguage = newValue;
+                              });
+                              await _settingsService.setTargetLanguage(newValue);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Image picker buttons
             Row(
               children: [
                 Expanded(
-                  child: DropdownButton<String>(
-                    value: _sourceLanguage,
-                    isExpanded: true,
-                    items: _sourceLanguages.map((String language) {
-                      return DropdownMenuItem<String>(
-                        value: language,
-                        child: Text(language),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) async {
-                      if (newValue != null) {
-                        setState(() {
-                          _sourceLanguage = newValue;
-                        });
-                        await _settingsService.setSourceLanguage(newValue);
-                      }
-                    },
+                  child: OutlinedButton.icon(
+                    onPressed: _pickImageFromGallery,
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Pick from Gallery'),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.swap_horiz),
-                  onPressed: _swapLanguages,
-                ),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButton<String>(
-                    value: _targetLanguage,
-                    isExpanded: true,
-                    items: _targetLanguages.map((String language) {
-                      return DropdownMenuItem<String>(
-                        value: language,
-                        child: Text(language),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) async {
-                      if (newValue != null) {
-                        setState(() {
-                          _targetLanguage = newValue;
-                        });
-                        await _settingsService.setTargetLanguage(newValue);
-                      }
-                    },
+                  child: OutlinedButton.icon(
+                    onPressed: _pickImageFromCamera,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Take Photo'),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            // Source text field with voice input
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child: Container(
-                height: _translationResult.isEmpty 
-                    ? MediaQuery.of(context).size.height * 0.6
-                    : _isInputFocused 
-                        ? MediaQuery.of(context).size.height * 0.35
-                        : MediaQuery.of(context).size.height * 0.15,
-                child: Stack(
+                  // Display selected image
+                  if (_selectedImage != null) ...[
+                    const SizedBox(height: 16),
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            _selectedImage!,
+                            height: 200,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: CircleAvatar(
+                            backgroundColor: Colors.red,
+                            child: IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                              onPressed: _removeImage,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  // Source text field with voice input
+                  Container(
+                    height: _translationResult.isEmpty 
+                        ? 400
+                        : _isInputFocused 
+                            ? 250
+                            : 150,
+                    child: Stack(
                 children: [
                   TextField(
                     controller: _sourceController,
@@ -421,7 +538,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                           ? 'Recording... Speak now' 
                           : _isTranscribing 
                               ? 'Processing audio...'
-                              : 'Enter text to translate or use voice input',
+                              : _selectedImage != null
+                                  ? 'Optional: Add context for the image'
+                                  : 'Enter text, pick an image, or use voice input',
                       border: const OutlineInputBorder(),
                       filled: true,
                       fillColor: _isRecording || _isTranscribing ? Colors.grey[200] : Colors.grey[100],
@@ -555,77 +674,81 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   ),
                 ],
               ),
-              ),
             ),
             const SizedBox(height: 16),
-            // Translate button
-            ElevatedButton(
-              onPressed: _isLoading ? null : _translate,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Translate', style: TextStyle(fontSize: 16)),
-            ),
-            if (_errorMessage.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Card(
-                color: Colors.red.shade50,
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline, color: Colors.red.shade700),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _errorMessage,
-                          style: TextStyle(
-                            color: Colors.red.shade900,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+            if (_translationResult.isNotEmpty)
+              Container(
+                height: _isInputFocused 
+                    ? 200
+                    : 350,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.blue[50],
                 ),
-              ),
-            ],
-            if (_translationResult.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              // Target text field
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                child: Container(
-                  height: _isInputFocused 
-                      ? MediaQuery.of(context).size.height * 0.25
-                      : MediaQuery.of(context).size.height * 0.45,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade400),
-                    borderRadius: BorderRadius.circular(4),
-                    color: Colors.blue[50],
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText.rich(
-                      TextSpan(
-                        children: _buildFormattedTranslation(_translationResult),
-                      ),
+                child: SingleChildScrollView(
+                  child: SelectableText.rich(
+                    TextSpan(
+                      children: _buildFormattedTranslation(_translationResult),
                     ),
                   ),
                 ),
               ),
-            ],
           ],
         ),
       ),
+    ),
+    Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Translate button
+          ElevatedButton(
+            onPressed: _isLoading ? null : _translate,
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Translate', style: TextStyle(fontSize: 16)),
+          ),
+          if (_errorMessage.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Card(
+              color: Colors.red.shade50,
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _errorMessage,
+                        style: TextStyle(
+                          color: Colors.red.shade900,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+  ],
+),
     );
   }
 

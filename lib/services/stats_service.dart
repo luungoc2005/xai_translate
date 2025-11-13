@@ -72,20 +72,46 @@ class StatsService {
         'count': 0,
         'avgResponseTime': 0.0,
         'avgTimePerWord': 0.0,
+        'avgTimePerImage': 0.0,
         'totalWords': 0,
+        'totalImages': 0,
+        'textOnlyCount': 0,
+        'imageOnlyCount': 0,
+        'textOnlyAvgTime': 0.0,
+        'imageOnlyAvgTime': 0.0,
       };
     }
     
     final totalResponseTime = stats.fold<int>(0, (sum, s) => sum + s.responseTimeMs);
     final totalWords = stats.fold<int>(0, (sum, s) => sum + s.wordCount);
+    final totalImages = stats.fold<int>(0, (sum, s) => sum + s.imageCount);
     final avgResponseTime = totalResponseTime / stats.length;
     final avgTimePerWord = totalWords > 0 ? totalResponseTime / totalWords : 0.0;
+    final avgTimePerImage = totalImages > 0 ? totalResponseTime / totalImages : 0.0;
+    
+    // Separate text-only and image-only stats
+    final textOnlyStats = stats.where((s) => s.wordCount > 0 && s.imageCount == 0).toList();
+    final imageOnlyStats = stats.where((s) => s.imageCount > 0 && s.wordCount == 0).toList();
+    
+    final textOnlyAvgTime = textOnlyStats.isNotEmpty
+        ? textOnlyStats.fold<int>(0, (sum, s) => sum + s.responseTimeMs) / textOnlyStats.length
+        : 0.0;
+    
+    final imageOnlyAvgTime = imageOnlyStats.isNotEmpty
+        ? imageOnlyStats.fold<int>(0, (sum, s) => sum + s.responseTimeMs) / imageOnlyStats.length
+        : 0.0;
     
     return {
       'count': stats.length,
       'avgResponseTime': avgResponseTime,
       'avgTimePerWord': avgTimePerWord,
+      'avgTimePerImage': avgTimePerImage,
       'totalWords': totalWords,
+      'totalImages': totalImages,
+      'textOnlyCount': textOnlyStats.length,
+      'imageOnlyCount': imageOnlyStats.length,
+      'textOnlyAvgTime': textOnlyAvgTime,
+      'imageOnlyAvgTime': imageOnlyAvgTime,
     };
   }
 

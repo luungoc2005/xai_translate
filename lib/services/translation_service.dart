@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import '../models/llm_provider.dart';
 import '../models/regional_preference.dart';
 import '../models/translation_stats.dart';
@@ -61,13 +62,24 @@ class TranslationService {
     String? sourceLanguage,
     required String targetLanguage,
     RegionalPreference regionalPreference = RegionalPreference.none,
+    bool isImageTranslation = false,
   }) {
     // Base translation instruction
     String instruction;
-    if (sourceLanguage == null || sourceLanguage == 'Auto-detect') {
-      instruction = 'Translate this text to $targetLanguage: $text';
+    
+    if (isImageTranslation) {
+      // For image translation, we ask the model to translate any text in the image
+      if (text.isEmpty) {
+        instruction = 'Translate all text visible in the following image to $targetLanguage.';
+      } else {
+        instruction = 'Translate all text visible in the following image to $targetLanguage. Additional context: $text';
+      }
     } else {
-      instruction = 'Translate this text from $sourceLanguage to $targetLanguage: $text';
+      if (sourceLanguage == null || sourceLanguage == 'Auto-detect') {
+        instruction = 'Translate this text to $targetLanguage: $text';
+      } else {
+        instruction = 'Translate this text from $sourceLanguage to $targetLanguage: $text';
+      }
     }
 
     // Add regional preference instructions if applicable
@@ -85,6 +97,45 @@ class TranslationService {
     }
 
     return instruction;
+  }
+
+  /// Scales down an image if it's too large, maintaining aspect ratio
+  /// Target max dimension is 2048px for good quality while saving bandwidth
+  Future<List<int>> _scaleImageIfNeeded(File imageFile) async {
+    final imageBytes = await imageFile.readAsBytes();
+    final image = img.decodeImage(imageBytes);
+    
+    if (image == null) {
+      // If we can't decode, return original bytes
+      return imageBytes;
+    }
+
+    // Define max dimension (2048px is a good balance for AI vision models)
+    const maxDimension = 2048;
+    
+    // Check if scaling is needed
+    if (image.width <= maxDimension && image.height <= maxDimension) {
+      // Image is already small enough, return original bytes
+      return imageBytes;
+    }
+
+    // Calculate new dimensions maintaining aspect ratio
+    int newWidth, newHeight;
+    if (image.width > image.height) {
+      newWidth = maxDimension;
+      newHeight = (image.height * maxDimension / image.width).round();
+    } else {
+      newHeight = maxDimension;
+      newWidth = (image.width * maxDimension / image.height).round();
+    }
+
+    // Resize the image
+    final resized = img.copyResize(image, width: newWidth, height: newHeight);
+    
+    // Encode back to JPEG with 85% quality (good balance between size and quality)
+    final resizedBytes = img.encodeJpg(resized, quality: 85);
+    
+    return resizedBytes;
   }
 
   int _countWords(String text) {
@@ -130,6 +181,7 @@ class TranslationService {
     required LLMProvider provider,
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
+    File? image,
   }) async {
     final startTime = DateTime.now();
     final wordCount = _countWords(text);
@@ -141,6 +193,7 @@ class TranslationService {
       provider: provider,
       apiKey: apiKey,
       regionalPreference: regionalPreference,
+      image: image,
     );
     
     final endTime = DateTime.now();
@@ -150,6 +203,7 @@ class TranslationService {
       provider: provider,
       sourceLanguage: sourceLanguage ?? 'Auto-detect',
       wordCount: wordCount,
+      imageCount: image != null ? 1 : 0,
       responseTimeMs: responseTimeMs,
       regionalPreferenceEnabled: regionalPreference != RegionalPreference.none,
       timestamp: endTime,
@@ -168,12 +222,13 @@ class TranslationService {
     required LLMProvider provider,
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
+    File? image,
   }) async {
     if (apiKey.isEmpty) {
       throw Exception('API key is required');
     }
 
-    if (text.isEmpty) {
+    if (text.isEmpty && image == null) {
       return '';
     }
 
@@ -187,6 +242,7 @@ class TranslationService {
           provider: provider,
           apiKey: apiKey,
           regionalPreference: regionalPreference,
+          image: image,
         );
       case LLMProvider.gemini:
         return _translateWithGemini(
@@ -195,6 +251,7 @@ class TranslationService {
           targetLanguage: targetLanguage,
           apiKey: apiKey,
           regionalPreference: regionalPreference,
+          image: image,
         );
     }
   }
@@ -206,6 +263,7 @@ class TranslationService {
     required LLMProvider provider,
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
+    File? image,
   }) async {
     try {
       final url = Uri.parse(provider.apiEndpoint);
@@ -216,7 +274,36 @@ class TranslationService {
         sourceLanguage: sourceLanguage,
         targetLanguage: targetLanguage,
         regionalPreference: regionalPreference,
+        isImageTranslation: image != null,
       );
+      
+      // Build the user message content
+      List<Map<String, dynamic>> contentParts = [];
+      
+      // Add text instruction
+      contentParts.add({
+        'type': 'text',
+        'text': translationInstruction,
+      });
+      
+      if (image != null) {
+        // Scale and add image as base64
+        final imageBytes = await _scaleImageIfNeeded(image);
+        final base64Image = base64Encode(imageBytes);
+        // Always use JPEG mime type after scaling (unless original was PNG and not scaled)
+        final extension = image.path.split('.').last.toLowerCase();
+        final originalBytes = await image.readAsBytes();
+        final mimeType = (imageBytes.length == originalBytes.length && extension == 'png') 
+            ? 'image/png' 
+            : 'image/jpeg';
+        
+        contentParts.add({
+          'type': 'image_url',
+          'image_url': {
+            'url': 'data:$mimeType;base64,$base64Image',
+          },
+        });
+      }
       
       final response = await client.post(
         url,
@@ -229,11 +316,11 @@ class TranslationService {
           'messages': [
             {
               'role': 'system',
-              'content': 'You are a professional translator. Translate the given text to the target language. Only respond with the translated text, nothing else.',
+              'content': 'You are a professional language translator. Translate the given text, image or photo to the target language. Only respond with the translated text, nothing else.',
             },
             {
               'role': 'user',
-              'content': translationInstruction,
+              'content': contentParts,
             },
           ],
         }),
@@ -256,17 +343,46 @@ class TranslationService {
     required String targetLanguage,
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
+    File? image,
   }) async {
     try {
       final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}?key=$apiKey');
       
       // Build translation instruction using centralized prompt function
-      final translationInstruction = 'You are a professional translator. Translate the given text to the target language. Only respond with the translated text, nothing else.\n\n${_buildTranslationPrompt(
+      final translationInstruction = 'You are a professional translator. Translate the given text or image to the target language. Only respond with the translated text, nothing else.\n\n${_buildTranslationPrompt(
         text: text,
         sourceLanguage: sourceLanguage,
         targetLanguage: targetLanguage,
         regionalPreference: regionalPreference,
+        isImageTranslation: image != null,
       )}';
+      
+      // Build the content parts
+      List<Map<String, dynamic>> parts = [];
+      
+      if (image != null) {
+        // Scale and add image as inline data
+        final imageBytes = await _scaleImageIfNeeded(image);
+        final base64Image = base64Encode(imageBytes);
+        // Always use JPEG mime type after scaling (unless original was PNG and not scaled)
+        final extension = image.path.split('.').last.toLowerCase();
+        final originalBytes = await image.readAsBytes();
+        final mimeType = (imageBytes.length == originalBytes.length && extension == 'png') 
+            ? 'image/png' 
+            : 'image/jpeg';
+        
+        parts.add({
+          'inline_data': {
+            'mime_type': mimeType,
+            'data': base64Image,
+          },
+        });
+      }
+      
+      // Add text instruction
+      parts.add({
+        'text': translationInstruction,
+      });
       
       final response = await client.post(
         url,
@@ -276,11 +392,7 @@ class TranslationService {
         body: jsonEncode({
           'contents': [
             {
-              'parts': [
-                {
-                  'text': translationInstruction,
-                },
-              ],
+              'parts': parts,
             },
           ],
         }),

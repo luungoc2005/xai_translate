@@ -43,6 +43,11 @@ dependencies:
   record: ^6.1.2
   path: ^1.9.1
   ffi: ^2.1.4
+  
+  # Image picking and sharing
+  image_picker: ^1.1.2
+  receive_sharing_intent: ^1.8.0
+  image: ^4.3.0
 
 dev_dependencies:
   flutter_test:

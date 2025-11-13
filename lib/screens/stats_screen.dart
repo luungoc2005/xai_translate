@@ -259,23 +259,124 @@ class _StatsScreenState extends State<StatsScreen> {
                               ),
                               const Divider(height: 24),
                               _buildStatRow(
+                                'Total Images Translated',
+                                _currentStats!['totalImages'].toString(),
+                                Icons.image,
+                              ),
+                              const Divider(height: 24),
+                              _buildStatRow(
                                 'Avg Response Time',
                                 '${_currentStats!['avgResponseTime'].toStringAsFixed(0)} ms',
                                 Icons.timer,
                               ),
-                              const Divider(height: 24),
-                              _buildStatRow(
-                                'Avg Time per Word',
-                                '${_currentStats!['avgTimePerWord'].toStringAsFixed(1)} ms/word',
-                                Icons.speed,
-                                isHighlight: true,
-                              ),
+                              if (_currentStats!['totalWords'] > 0) ...[
+                                const Divider(height: 24),
+                                _buildStatRow(
+                                  'Avg Time per Word',
+                                  '${_currentStats!['avgTimePerWord'].toStringAsFixed(1)} ms/word',
+                                  Icons.speed,
+                                  isHighlight: true,
+                                ),
+                              ],
+                              if (_currentStats!['totalImages'] > 0) ...[
+                                const Divider(height: 24),
+                                _buildStatRow(
+                                  'Avg Time per Image',
+                                  '${_currentStats!['avgTimePerImage'].toStringAsFixed(0)} ms/image',
+                                  Icons.photo_camera,
+                                  isHighlight: true,
+                                ),
+                              ],
                             ],
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
+                    
+                    // Text-Only Stats Card
+                    if (_currentStats != null && _currentStats!['textOnlyCount'] > 0) ...[
+                      Card(
+                        color: Colors.blue.shade50,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.text_fields, size: 20, color: Colors.blue),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Text-Only Translations',
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _buildStatRow(
+                                'Count',
+                                _currentStats!['textOnlyCount'].toString(),
+                                Icons.numbers,
+                              ),
+                              const Divider(height: 24),
+                              _buildStatRow(
+                                'Avg Response Time',
+                                '${_currentStats!['textOnlyAvgTime'].toStringAsFixed(0)} ms',
+                                Icons.timer,
+                                isHighlight: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    
+                    // Image-Only Stats Card
+                    if (_currentStats != null && _currentStats!['imageOnlyCount'] > 0) ...[
+                      Card(
+                        color: Colors.purple.shade50,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.image, size: 20, color: Colors.purple),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Image-Only Translations',
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _buildStatRow(
+                                'Count',
+                                _currentStats!['imageOnlyCount'].toString(),
+                                Icons.numbers,
+                              ),
+                              const Divider(height: 24),
+                              _buildStatRow(
+                                'Avg Response Time',
+                                '${_currentStats!['imageOnlyAvgTime'].toStringAsFixed(0)} ms',
+                                Icons.timer,
+                                isHighlight: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     
                     // Provider Comparison Card (when no provider filter)
                     if (_selectedProvider == null) ...[
@@ -320,9 +421,21 @@ class _StatsScreenState extends State<StatsScreen> {
                                         ListTile(
                                           leading: Icon(Icons.dns, color: _getProviderColor(provider)),
                                           title: Text(provider.name),
-                                          subtitle: Text(
-                                            '${stats['count']} translations • '
-                                            '${stats['avgTimePerWord'].toStringAsFixed(1)} ms/word',
+                                          subtitle: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('${stats['count']} total translations'),
+                                              if (stats['textOnlyCount'] > 0)
+                                                Text(
+                                                  'Text: ${stats['textOnlyCount']} (${stats['textOnlyAvgTime'].toStringAsFixed(0)} ms avg)',
+                                                  style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                                                ),
+                                              if (stats['imageOnlyCount'] > 0)
+                                                Text(
+                                                  'Images: ${stats['imageOnlyCount']} (${stats['imageOnlyAvgTime'].toStringAsFixed(0)} ms avg)',
+                                                  style: TextStyle(fontSize: 12, color: Colors.purple.shade700),
+                                                ),
+                                            ],
                                           ),
                                           trailing: Text(
                                             '${stats['avgResponseTime'].toStringAsFixed(0)} ms',
