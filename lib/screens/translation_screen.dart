@@ -47,11 +47,13 @@ class _TranslationScreenState extends State<TranslationScreen> {
   double _recordingAmplitude = 0.0;
   Stream<double>? _amplitudeStream;
   bool _isInputFocused = false;
+  bool _isFromWhisper = false;
   bool _isOutputFocused = false;
   File? _selectedImage;
   late Stream<List<SharedMediaFile>> _sharedFilesStream;
   bool _isGeneratingTTS = false;
   bool _isPlayingTTS = false;
+  TextSelection? _outputTextSelection;
 
   final List<String> _sourceLanguages = [
     'Auto-detect',
@@ -67,6 +69,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
     'Korean',
     'Arabic',
     'Hindi',
+    'Vietnamese',
+    'Malay',
+    'Indonesian',
   ];
 
   final List<String> _targetLanguages = [
@@ -82,6 +87,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
     'Korean',
     'Arabic',
     'Hindi',
+    'Vietnamese',
+    'Malay',
+    'Indonesian',
   ];
 
   @override
@@ -218,6 +226,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
         apiKey: apiKey,
         regionalPreference: regionalPreference,
         image: _selectedImage,
+        isFromWhisper: _isFromWhisper,
       );
 
       final translation = result['translation'] as String;
@@ -250,6 +259,27 @@ class _TranslationScreenState extends State<TranslationScreen> {
         _errorMessage = 'Translation failed: ${e.toString()}';
         _isLoading = false;
       });
+    }
+  }
+
+  /// Translate and then immediately play TTS
+  Future<void> _translateAndSpeak() async {
+    // Check if OpenAI API key exists before proceeding
+    final openaiKey = await _settingsService.getApiKey(LLMProvider.openai);
+    
+    if (openaiKey.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please set your OpenAI API key in settings to use translate & speak';
+      });
+      return;
+    }
+
+    // First translate
+    await _translate();
+    
+    // If translation was successful and we have a result, play TTS
+    if (_translationResult.isNotEmpty && _errorMessage.isEmpty) {
+      await _playTTS();
     }
   }
 
@@ -316,6 +346,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       setState(() {
         _sourceController.text = transcription;
         _isTranscribing = false;
+        _isFromWhisper = true;
       });
 
       // Clean up audio file
@@ -356,6 +387,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _sourceController.text = _targetController.text;
       _targetController.text = tempText;
       _translationResult = tempText;
+      _isFromWhisper = false;
     });
 
     // Save the swapped languages
@@ -631,6 +663,14 @@ class _TranslationScreenState extends State<TranslationScreen> {
                               expands: true,
                               textAlignVertical: TextAlignVertical.top,
                               style: const TextStyle(fontSize: 18),
+                              onChanged: (value) {
+                                // Reset Whisper flag when user manually edits text
+                                if (_isFromWhisper) {
+                                  setState(() {
+                                    _isFromWhisper = false;
+                                  });
+                                }
+                              },
                               decoration: InputDecoration(
                                 hintText: _isRecording
                                     ? 'Recording... Speak now'
@@ -765,6 +805,28 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                   ),
                                 ),
                               ),
+                            // Clear input button
+                            if (_sourceController.text.isNotEmpty || _selectedImage != null)
+                              Positioned(
+                                bottom: 8,
+                                right: 64,
+                                child: FloatingActionButton(
+                                  mini: true,
+                                  onPressed: () {
+                                    setState(() {
+                                      _sourceController.clear();
+                                      _selectedImage = null;
+                                      _isFromWhisper = false;
+                                      _errorMessage = '';
+                                    });
+                                  },
+                                  backgroundColor: Colors.grey.shade600,
+                                  child: const Icon(
+                                    Icons.clear,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
                             // Voice input button
                             Positioned(
                               bottom: 8,
@@ -803,7 +865,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                           child: Stack(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                                 decoration: BoxDecoration(
                                   border: Border.all(color: Colors.grey.shade400),
                                   borderRadius: BorderRadius.circular(4),
@@ -821,6 +883,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                         ),
                                       ),
                                       focusNode: _targetFocusNode,
+                                      selectionControls: materialTextSelectionControls,
+                                      onSelectionChanged: (selection, cause) {
+                                        setState(() {
+                                          _outputTextSelection = selection;
+                                        });
+                                      },
                                     ),
                                   ),
                                 ),
@@ -864,25 +932,77 @@ class _TranslationScreenState extends State<TranslationScreen> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Translate button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _translate,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Translate', style: TextStyle(fontSize: 16)),
+                // Split button: Translate with dropdown menu
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _translate,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(4),
+                              bottomLeft: Radius.circular(4),
+                            ),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Translate', style: TextStyle(fontSize: 16)),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      enabled: !_isLoading,
+                      onSelected: (value) {
+                        if (value == 'speak') {
+                          _translateAndSpeak();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'speak',
+                          child: Row(
+                            children: [
+                              Icon(Icons.record_voice_over),
+                              SizedBox(width: 8),
+                              Text('Translate & Speak'),
+                            ],
+                          ),
+                        ),
+                      ],
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: _isLoading 
+                              ? Theme.of(context).disabledColor 
+                              : Theme.of(context).colorScheme.primary,
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(4),
+                            bottomRight: Radius.circular(4),
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Icon(
+                          Icons.arrow_drop_down,
+                          color: _isLoading 
+                              ? Colors.grey 
+                              : Theme.of(context).colorScheme.onPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 if (_errorMessage.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -910,6 +1030,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   ),
                 ],
               ],
+            ),
             ),
           ),
         ],
@@ -953,13 +1074,25 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       final voice = await _settingsService.getTTSVoice();
 
+      // Get selected text if available, otherwise use full translation
+      String textToSpeak = _translationResult;
+      
+      if (_outputTextSelection != null && !_outputTextSelection!.isCollapsed) {
+        // Extract selected text from the translation
+        final start = _outputTextSelection!.start;
+        final end = _outputTextSelection!.end;
+        if (start >= 0 && end <= _translationResult.length) {
+          textToSpeak = _translationResult.substring(start, end);
+        }
+      }
+
       // Generate speech (truncate to OpenAI's 4096 character limit)
-      final textToSpeak = _translationResult.length > 4096
-          ? _translationResult.substring(0, 4096)
-          : _translationResult;
+      final truncatedText = textToSpeak.length > 4096
+          ? textToSpeak.substring(0, 4096)
+          : textToSpeak;
       
       final audioPath = await _ttsService.generateSpeech(
-        text: textToSpeak,
+        text: truncatedText,
         apiKey: apiKey,
         voice: voice,
       );

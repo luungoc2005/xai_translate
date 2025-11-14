@@ -65,6 +65,7 @@ class TranslationService {
     required String targetLanguage,
     RegionalPreference regionalPreference = RegionalPreference.none,
     bool isImageTranslation = false,
+    bool isFromWhisper = false,
   }) {
     // Base translation instruction
     String instruction;
@@ -96,6 +97,11 @@ class TranslationService {
       instruction += '\n- Temperature: Use Celsius. Example: "75°F (T/N: ~24°C)"';
       instruction += '\n- Cultural/contextual hints relevant to $region context when helpful';
       instruction += '\n\nProvide the translation with these inline T/N annotations to help readers in $region understand the content better.';
+    }
+
+    // Add note about Whisper transcription if applicable
+    if (isFromWhisper && !isImageTranslation) {
+      instruction += '\n\nNOTE: The input text was transcribed from speech using a speech-to-text model and may contain errors or phonetically similar incorrect words. Please infer the correct intended text from context and phonetic similarity before translating. Fix any obvious transcription errors to ensure accurate translation.';
     }
 
     return instruction;
@@ -184,6 +190,7 @@ class TranslationService {
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
     File? image,
+    bool isFromWhisper = false,
   }) async {
     final startTime = DateTime.now();
     final wordCount = _countWords(text);
@@ -196,6 +203,7 @@ class TranslationService {
       apiKey: apiKey,
       regionalPreference: regionalPreference,
       image: image,
+      isFromWhisper: isFromWhisper,
     );
     
     final endTime = DateTime.now();
@@ -225,6 +233,7 @@ class TranslationService {
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
     File? image,
+    bool isFromWhisper = false,
   }) async {
     if (apiKey.isEmpty) {
       throw Exception('API key is required');
@@ -245,6 +254,7 @@ class TranslationService {
           apiKey: apiKey,
           regionalPreference: regionalPreference,
           image: image,
+          isFromWhisper: isFromWhisper,
         );
       case LLMProvider.gemini:
         return _translateWithGemini(
@@ -254,6 +264,7 @@ class TranslationService {
           apiKey: apiKey,
           regionalPreference: regionalPreference,
           image: image,
+          isFromWhisper: isFromWhisper,
         );
     }
   }
@@ -266,6 +277,7 @@ class TranslationService {
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
     File? image,
+    bool isFromWhisper = false,
   }) async {
     try {
       final url = Uri.parse(provider.apiEndpoint);
@@ -277,6 +289,7 @@ class TranslationService {
         targetLanguage: targetLanguage,
         regionalPreference: regionalPreference,
         isImageTranslation: image != null,
+        isFromWhisper: isFromWhisper,
       );
       
       // Build the user message content
@@ -346,6 +359,7 @@ class TranslationService {
     required String apiKey,
     RegionalPreference regionalPreference = RegionalPreference.none,
     File? image,
+    bool isFromWhisper = false,
   }) async {
     try {
       final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}/${LLMProvider.gemini.model}:generateContent?key=$apiKey');
@@ -357,6 +371,7 @@ class TranslationService {
         targetLanguage: targetLanguage,
         regionalPreference: regionalPreference,
         isImageTranslation: image != null,
+        isFromWhisper: isFromWhisper,
       )}';
       
       // Build the content parts
