@@ -52,6 +52,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   late Stream<List<SharedMediaFile>> _sharedFilesStream;
   bool _isGeneratingTTS = false;
   bool _isPlayingTTS = false;
+  String _selectedText = '';
 
   final List<String> _sourceLanguages = [
     'Auto-detect',
@@ -175,6 +176,47 @@ class _TranslationScreenState extends State<TranslationScreen> {
     setState(() {
       _selectedImage = null;
     });
+  }
+
+  void _showImagePreview() {
+    if (_selectedImage == null) return;
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(16),
+            child: GestureDetector(
+              onTap: () {}, // Prevents closing when tapping the image
+              child: Center(
+                child: Stack(
+                  children: [
+                    InteractiveViewer(
+                      child: Image.file(_selectedImage!),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black87,
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                          onPressed: () => Navigator.of(context).pop(),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _translate() async {
@@ -447,9 +489,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 const imageButtonsHeight = 48.0;
                 const spacing = 16.0;
 
-                // Image height when present
+                // Image chip height when present
                 final imageHeight = _selectedImage != null
-                    ? 200.0 + spacing
+                    ? 48.0 + spacing
                     : 0.0;
 
                 // Calculate remaining height for text fields
@@ -573,33 +615,30 @@ class _TranslationScreenState extends State<TranslationScreen> {
                       // Display selected image
                       if (_selectedImage != null) ...[
                         const SizedBox(height: 16),
-                        Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                _selectedImage!,
-                                height: 200,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: CircleAvatar(
-                                backgroundColor: Colors.red,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  onPressed: _removeImage,
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: GestureDetector(
+                            onTap: _showImagePreview,
+                            child: Chip(
+                              avatar: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(
+                                  _selectedImage!,
+                                  width: 32,
+                                  height: 32,
+                                  fit: BoxFit.cover,
                                 ),
                               ),
+                              label: const Text('Image attached'),
+                              deleteIcon: const Icon(Icons.close, size: 18),
+                              onDeleted: _removeImage,
+                              backgroundColor: Colors.blue.shade50,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
                             ),
-                          ],
+                          ),
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -823,19 +862,32 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                   borderRadius: BorderRadius.circular(4),
                                   color: Colors.blue[50],
                                 ),
-                                child: Markdown(
-                                  data: _convertToMarkdown(_translationResult),
-                                  selectable: true,
-                                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 48),
-                                  styleSheet: MarkdownStyleSheet(
-                                    p: const TextStyle(
-                                      fontSize: 18,
-                                      color: Colors.black87,
-                                    ),
-                                    em: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey.shade600,
-                                      fontStyle: FontStyle.italic,
+                                child: SelectionArea(
+                                  onSelectionChanged: (selection) {
+                                    if (selection != null) {
+                                      setState(() {
+                                        _selectedText = selection.plainText;
+                                      });
+                                    } else {
+                                      setState(() {
+                                        _selectedText = '';
+                                      });
+                                    }
+                                  },
+                                  child: Markdown(
+                                    data: _convertToMarkdown(_translationResult),
+                                    selectable: false, // SelectionArea handles this
+                                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 48),
+                                    styleSheet: MarkdownStyleSheet(
+                                      p: const TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.black87,
+                                      ),
+                                      em: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey.shade600,
+                                        fontStyle: FontStyle.italic,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1020,8 +1072,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       final voice = await _settingsService.getTTSVoice();
 
-      // Use full translation for TTS (strip T/N notes for cleaner speech)
-      String textToSpeak = _translationResult;
+      // Use selected text if available, otherwise use full translation
+      String textToSpeak = _selectedText.isNotEmpty 
+          ? _selectedText 
+          : _translationResult;
       
       // Remove T/N notes from speech output
       final tnPattern = RegExp(r'\(T/N:[^)]+\)');

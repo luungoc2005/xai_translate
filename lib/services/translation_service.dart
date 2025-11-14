@@ -9,9 +9,62 @@ import '../models/translation_stats.dart';
 class TranslationService {
   final http.Client client;
 
-  static const String _systemPrompt = 'You are a professional language translator. Translate the given text, image or photo to the target language. Only respond with the translated text, nothing else.';
-
   TranslationService({http.Client? client}) : client = client ?? http.Client();
+
+  /// Builds a comprehensive system prompt with all translation instructions
+  String _buildSystemPrompt({
+    String? sourceLanguage,
+    required String targetLanguage,
+    RegionalPreference regionalPreference = RegionalPreference.none,
+    bool isImageTranslation = false,
+    bool isFromWhisper = false,
+  }) {
+    String systemPrompt = 'You are a professional language translator.';
+    
+    // Base translation instruction
+    if (isImageTranslation) {
+      systemPrompt += ' Translate any text in the provided image to $targetLanguage.';
+      
+      // Add menu-specific instruction
+      systemPrompt += '\n\n<menu_image_notes>';
+      systemPrompt += '\nIf the image happens to be a menu, keep the original dish names in their original language and script (not romanized) in parentheses next to the translated names. Example: "Translated Dish Name (原始菜名)".';
+      systemPrompt += '\n</menu_image_notes>';
+    } else {
+      if (sourceLanguage == null || sourceLanguage == 'Auto-detect') {
+        systemPrompt += ' Translate the provided text to $targetLanguage.';
+      } else {
+        systemPrompt += ' Translate the provided text from $sourceLanguage to $targetLanguage.';
+      }
+    }
+
+    // Add regional preference instructions if applicable
+    if (regionalPreference != RegionalPreference.none) {
+      final currency = regionalPreference.currency;
+      final unitSystem = regionalPreference.unitSystem;
+      final region = regionalPreference.name;
+      
+      systemPrompt += '\n\n<translator_notes>';
+      systemPrompt += '\nAdd translator notes (T/N) in parentheses after any:';
+      systemPrompt += '\n- Currency conversions: Convert and show in $currency. Example: "100 USD (T/N: ~$currency 135)". Do not convert if already in $currency.';
+      systemPrompt += '\n- Unit conversions: Convert to $unitSystem units. Example: "5 miles (T/N: ~8 km)". Do not convert if units are already in $unitSystem.';
+      systemPrompt += '\n- Temperature: Use Celsius. Example: "75°F (T/N: ~24°C)"';
+      systemPrompt += '\n- Cultural/contextual hints relevant to $region context when helpful';
+      systemPrompt += '\n\nProvide the translation with these inline T/N annotations to help readers in $region understand the content better.';
+      systemPrompt += '\nIMPORTANT: Provide unit/currency conversions immediately next to the original values. Only provide the converted values, do NOT explain how to perform the conversions.';
+      systemPrompt += '\n</translator_notes>';
+    }
+
+    // Add note about Whisper transcription if applicable
+    if (isFromWhisper && !isImageTranslation) {
+      systemPrompt += '\n\n<speech_to_text_notes>';
+      systemPrompt += '\nThe input text was transcribed from speech using a speech-to-text model and may contain errors or phonetically similar incorrect words. Please infer the correct intended text from context and phonetic similarity before translating. Fix any obvious transcription errors to ensure accurate translation.';
+      systemPrompt += '\n</speech_to_text_notes>';
+    }
+
+    systemPrompt += '\n\nOnly respond with the translated text, nothing else.';
+    
+    return systemPrompt;
+  }
 
   /// Converts technical exceptions into user-friendly error messages
   String _getUserFriendlyErrorMessage(dynamic error) {
@@ -59,56 +112,7 @@ class TranslationService {
     return 'Translation failed: ${errorString.replaceAll('Exception: ', '')}';
   }
 
-  String _buildTranslationPrompt({
-    required String text,
-    String? sourceLanguage,
-    required String targetLanguage,
-    RegionalPreference regionalPreference = RegionalPreference.none,
-    bool isImageTranslation = false,
-    bool isFromWhisper = false,
-  }) {
-    // Base translation instruction
-    String instruction;
-    
-    if (isImageTranslation) {
-      // For image translation, we ask the model to translate any text in the image
-      if (text.isEmpty) {
-        instruction = 'Translate this image to $targetLanguage.';
-      } else {
-        instruction = 'Translate this image to $targetLanguage. Additional context: $text';
-      }
-      
-      // Add menu-specific instruction
-      instruction += '\n\nIf the image happens to be a menu, keep the original dish names in their original language and script (not romanized) in parentheses next to the translated names. Example: "Translated Dish Name (原始菜名)".';
-    } else {
-      if (sourceLanguage == null || sourceLanguage == 'Auto-detect') {
-        instruction = 'Translate this text to $targetLanguage: $text';
-      } else {
-        instruction = 'Translate this text from $sourceLanguage to $targetLanguage: $text';
-      }
-    }
 
-    // Add regional preference instructions if applicable
-    if (regionalPreference != RegionalPreference.none) {
-      final currency = regionalPreference.currency;
-      final unitSystem = regionalPreference.unitSystem;
-      final region = regionalPreference.name;
-      
-      instruction += '\n\nIMPORTANT: Add translator notes (T/N) in parentheses after any:';
-      instruction += '\n- Currency conversions: Convert and show in $currency. Example: "100 USD (T/N: ~$currency 135)". Do not convert if already in $currency.';
-      instruction += '\n- Unit conversions: Convert to $unitSystem units. Example: "5 miles (T/N: ~8 km)". Do not convert if units are already in $unitSystem.';
-      instruction += '\n- Temperature: Use Celsius. Example: "75°F (T/N: ~24°C)"';
-      instruction += '\n- Cultural/contextual hints relevant to $region context when helpful';
-      instruction += '\n\nProvide the translation with these inline T/N annotations to help readers in $region understand the content better.';
-    }
-
-    // Add note about Whisper transcription if applicable
-    if (isFromWhisper && !isImageTranslation) {
-      instruction += '\n\nNOTE: The input text was transcribed from speech using a speech-to-text model and may contain errors or phonetically similar incorrect words. Please infer the correct intended text from context and phonetic similarity before translating. Fix any obvious transcription errors to ensure accurate translation.';
-    }
-
-    return instruction;
-  }
 
   /// Scales down an image if it's too large, maintaining aspect ratio
   /// Target max dimension is 2048px for good quality while saving bandwidth
@@ -122,7 +126,7 @@ class TranslationService {
     }
 
     // Define max dimension (2048px is a good balance for AI vision models)
-    const maxDimension = 2048;
+    const maxDimension = 1024;
     
     // Check if scaling is needed
     if (image.width <= maxDimension && image.height <= maxDimension) {
@@ -285,9 +289,8 @@ class TranslationService {
     try {
       final url = Uri.parse(provider.apiEndpoint);
       
-      // Build translation instruction using centralized prompt function
-      final translationInstruction = _buildTranslationPrompt(
-        text: text,
+      // Build comprehensive system prompt
+      final systemPrompt = _buildSystemPrompt(
         sourceLanguage: sourceLanguage,
         targetLanguage: targetLanguage,
         regionalPreference: regionalPreference,
@@ -295,7 +298,7 @@ class TranslationService {
         isFromWhisper: isFromWhisper,
       );
       
-      // Build the user message content
+      // Build the user message content (only the content to translate)
       List<Map<String, dynamic>> contentParts = [];
       
       if (image != null) {
@@ -317,11 +320,13 @@ class TranslationService {
         });
       }
       
-      // Add text instruction
-      contentParts.add({
-        'type': 'text',
-        'text': translationInstruction,
-      });
+      // Add text to translate (or additional context for images)
+      if (text.isNotEmpty) {
+        contentParts.add({
+          'type': 'text',
+          'text': text,
+        });
+      }
       
       final response = await client.post(
         url,
@@ -334,7 +339,7 @@ class TranslationService {
           'messages': [
             {
               'role': 'system',
-              'content': _systemPrompt,
+              'content': systemPrompt,
             },
             {
               'role': 'user',
@@ -367,18 +372,22 @@ class TranslationService {
     try {
       final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}/${LLMProvider.gemini.model}:generateContent?key=$apiKey');
       
-      // Build translation instruction using centralized prompt function
-      final translationInstruction = '$_systemPrompt\n\n${_buildTranslationPrompt(
-        text: text,
+      // Build comprehensive system prompt
+      final systemPrompt = _buildSystemPrompt(
         sourceLanguage: sourceLanguage,
         targetLanguage: targetLanguage,
         regionalPreference: regionalPreference,
         isImageTranslation: image != null,
         isFromWhisper: isFromWhisper,
-      )}';
+      );
       
-      // Build the content parts
+      // Build the content parts (only the content to translate)
       List<Map<String, dynamic>> parts = [];
+      
+      // Add system instructions as first text part
+      parts.add({
+        'text': systemPrompt,
+      });
       
       if (image != null) {
         // Scale and add image as inline data
@@ -399,10 +408,12 @@ class TranslationService {
         });
       }
       
-      // Add text instruction
-      parts.add({
-        'text': translationInstruction,
-      });
+      // Add text to translate (or additional context for images)
+      if (text.isNotEmpty) {
+        parts.add({
+          'text': text,
+        });
+      }
       
       final response = await client.post(
         url,
