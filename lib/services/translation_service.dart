@@ -79,7 +79,7 @@ class TranslationService {
       }
       
       // Add menu-specific instruction
-      instruction += '\n\nIf the image happens to be a menu, keep the original dish names in parentheses next to the translated names. Example: "Translated Dish Name (Original Name)".';
+      instruction += '\n\nIf the image happens to be a menu, keep the original dish names in their original language and script (not romanized) in parentheses next to the translated names. Example: "Translated Dish Name (原始菜名)".';
     } else {
       if (sourceLanguage == null || sourceLanguage == 'Auto-detect') {
         instruction = 'Translate this text to $targetLanguage: $text';
