@@ -38,6 +38,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
   String _sourceLanguage = 'Auto-detect';
   String _targetLanguage = 'English';
+  LLMProvider _selectedProvider = LLMProvider.grok;
+  List<LLMProvider> _availableProviders = [];
   bool _isLoading = false;
   bool _isRecording = false;
   bool _isTranscribing = false;
@@ -129,10 +131,29 @@ class _TranslationScreenState extends State<TranslationScreen> {
   Future<void> _loadSavedLanguages() async {
     final sourceLanguage = await _settingsService.getSourceLanguage();
     final targetLanguage = await _settingsService.getTargetLanguage();
+    final selectedProvider = await _settingsService.getSelectedProvider();
+    
+    // Check which providers have API keys configured
+    final availableProviders = <LLMProvider>[];
+    for (final provider in LLMProvider.values) {
+      final apiKey = await _settingsService.getApiKey(provider);
+      if (apiKey.isNotEmpty) {
+        availableProviders.add(provider);
+      }
+    }
+
+    // Ensure selected provider is available, otherwise use first available
+    var providerToUse = selectedProvider;
+    if (availableProviders.isNotEmpty && !availableProviders.contains(selectedProvider)) {
+      providerToUse = availableProviders.first;
+      await _settingsService.setSelectedProvider(providerToUse);
+    }
 
     setState(() {
       _sourceLanguage = sourceLanguage;
       _targetLanguage = targetLanguage;
+      _selectedProvider = providerToUse;
+      _availableProviders = availableProviders;
     });
   }
 
@@ -234,7 +255,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     });
 
     try {
-      final provider = await _settingsService.getSelectedProvider();
+      final provider = _selectedProvider;
       final apiKey = await _settingsService.getApiKey(provider);
       final regionalPreference = await _settingsService.getRegionalPreference();
 
@@ -794,6 +815,61 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                         ),
                                       ),
                                     ],
+                                  ),
+                                ),
+                              ),
+                            // Provider dropdown at bottom left
+                            if (_availableProviders.isNotEmpty)
+                              Positioned(
+                                bottom: 8,
+                                left: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.grey.shade400),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: DropdownButton<LLMProvider>(
+                                    value: _selectedProvider,
+                                    isDense: true,
+                                    underline: const SizedBox(),
+                                    icon: const Icon(Icons.arrow_drop_down, size: 20),
+                                    items: _availableProviders.map((provider) {
+                                      return DropdownMenuItem<LLMProvider>(
+                                        value: provider,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.cloud,
+                                              size: 16,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              provider.name,
+                                              style: const TextStyle(fontSize: 14),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (LLMProvider? newValue) async {
+                                      if (newValue != null) {
+                                        setState(() {
+                                          _selectedProvider = newValue;
+                                        });
+                                        await _settingsService.setSelectedProvider(newValue);
+                                      }
+                                    },
                                   ),
                                 ),
                               ),

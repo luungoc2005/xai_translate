@@ -17,7 +17,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _openaiKeyController = TextEditingController();
   final TextEditingController _geminiKeyController = TextEditingController();
   
-  LLMProvider _selectedProvider = LLMProvider.grok;
   RegionalPreference _selectedRegionalPreference = RegionalPreference.none;
   TTSVoice _selectedTTSVoice = TTSVoice.alloy;
   bool _isLoading = true;
@@ -35,7 +34,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      final provider = await _settingsService.getSelectedProvider();
       final regionalPreference = await _settingsService.getRegionalPreference();
       final ttsVoice = await _settingsService.getTTSVoice();
       final grokKey = await _settingsService.getApiKey(LLMProvider.grok);
@@ -43,7 +41,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final geminiKey = await _settingsService.getApiKey(LLMProvider.gemini);
 
       setState(() {
-        _selectedProvider = provider;
         _selectedRegionalPreference = regionalPreference;
         _selectedTTSVoice = ttsVoice;
         _grokKeyController.text = grokKey;
@@ -64,7 +61,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      await _settingsService.setSelectedProvider(_selectedProvider);
       await _settingsService.setRegionalPreference(_selectedRegionalPreference);
       await _settingsService.setTTSVoice(_selectedTTSVoice);
       await _settingsService.setApiKey(LLMProvider.grok, _grokKeyController.text);
@@ -108,6 +104,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
+        actions: [
+          if (!_isLoading)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+              child: _isSaving
+                  ? const Center(
+                      child: SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    )
+                  : TextButton.icon(
+                      onPressed: _saveSettings,
+                      icon: const Icon(Icons.save, size: 18),
+                      label: const Text('Save'),
+                    ),
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -116,32 +134,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'LLM Provider',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButton<String>(
-                    value: _selectedProvider.toString().split('.').last,
-                    isExpanded: true,
-                    items: LLMProvider.values.map((LLMProvider provider) {
-                      return DropdownMenuItem<String>(
-                        value: provider.toString().split('.').last,
-                        child: Text(provider.name),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          _selectedProvider = LLMProviderExtension.fromString(newValue);
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 24),
                   const Text(
                     'Regional Preferences',
                     style: TextStyle(
@@ -294,19 +286,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isSaving ? null : _saveSettings,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Save Settings', style: TextStyle(fontSize: 16)),
-                  ),
                 ],
               ),
             ),

@@ -61,8 +61,11 @@ class TranslationService {
       systemPrompt += '\n</speech_to_text_notes>';
     }
 
-    systemPrompt += '\n\nOnly respond with the translated text, nothing else.';
-    
+    systemPrompt += '\n\n<output_format>';
+    systemPrompt += '\n1. Only respond with the translated text, nothing else.';
+    systemPrompt += '\n2. You can format the output using markdown for better readability.';
+    systemPrompt += '\n</output_format>';
+
     return systemPrompt;
   }
 
@@ -347,7 +350,7 @@ class TranslationService {
             },
           ],
         }),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(Duration(seconds: image != null ? 180 : 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -427,7 +430,7 @@ class TranslationService {
             },
           ],
         }),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(Duration(seconds: image != null ? 180 : 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
