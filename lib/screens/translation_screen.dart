@@ -132,7 +132,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     final sourceLanguage = await _settingsService.getSourceLanguage();
     final targetLanguage = await _settingsService.getTargetLanguage();
     final selectedProvider = await _settingsService.getSelectedProvider();
-    
+
     // Check which providers have API keys configured
     final availableProviders = <LLMProvider>[];
     for (final provider in LLMProvider.values) {
@@ -144,7 +144,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
     // Ensure selected provider is available, otherwise use first available
     var providerToUse = selectedProvider;
-    if (availableProviders.isNotEmpty && !availableProviders.contains(selectedProvider)) {
+    if (availableProviders.isNotEmpty &&
+        !availableProviders.contains(selectedProvider)) {
       providerToUse = availableProviders.first;
       await _settingsService.setSelectedProvider(providerToUse);
     }
@@ -201,7 +202,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
   void _showImagePreview() {
     if (_selectedImage == null) return;
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -215,16 +216,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
               child: Center(
                 child: Stack(
                   children: [
-                    InteractiveViewer(
-                      child: Image.file(_selectedImage!),
-                    ),
+                    InteractiveViewer(child: Image.file(_selectedImage!)),
                     Positioned(
                       top: 8,
                       right: 8,
                       child: CircleAvatar(
                         backgroundColor: Colors.black87,
                         child: IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                          icon: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                           onPressed: () => Navigator.of(context).pop(),
                           padding: EdgeInsets.zero,
                         ),
@@ -316,17 +319,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
   Future<void> _translateAndSpeak() async {
     // Check if OpenAI API key exists before proceeding
     final openaiKey = await _settingsService.getApiKey(LLMProvider.openai);
-    
+
     if (openaiKey.isEmpty) {
       setState(() {
-        _errorMessage = 'Please set your OpenAI API key in settings to use translate & speak';
+        _errorMessage =
+            'Please set your OpenAI API key in settings to use translate & speak';
       });
       return;
     }
 
     // First translate
     await _translate();
-    
+
     // If translation was successful and we have a result, play TTS
     if (_translationResult.isNotEmpty && _errorMessage.isEmpty) {
       await _playTTS();
@@ -450,12 +454,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
   String _convertToMarkdown(String text) {
     // Convert (T/N: ...) to italic text
     final tnPattern = RegExp(r'\(T/N:([^)]+)\)');
-    
+
     String markdownText = text.replaceAllMapped(tnPattern, (match) {
       final note = match.group(1)?.trim() ?? '';
       return '*T/N:$note*';
     });
-    
+
     return markdownText;
   }
 
@@ -824,11 +828,16 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                 bottom: 8,
                                 left: 8,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: Colors.grey.shade400),
+                                    border: Border.all(
+                                      color: Colors.grey.shade400,
+                                    ),
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.black.withOpacity(0.1),
@@ -841,7 +850,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                     value: _selectedProvider,
                                     isDense: true,
                                     underline: const SizedBox(),
-                                    icon: const Icon(Icons.arrow_drop_down, size: 20),
+                                    icon: const Icon(
+                                      Icons.arrow_drop_down,
+                                      size: 20,
+                                    ),
                                     items: _availableProviders.map((provider) {
                                       return DropdownMenuItem<LLMProvider>(
                                         value: provider,
@@ -856,7 +868,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                             const SizedBox(width: 6),
                                             Text(
                                               provider.name,
-                                              style: const TextStyle(fontSize: 14),
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -867,14 +881,16 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                         setState(() {
                                           _selectedProvider = newValue;
                                         });
-                                        await _settingsService.setSelectedProvider(newValue);
+                                        await _settingsService
+                                            .setSelectedProvider(newValue);
                                       }
                                     },
                                   ),
                                 ),
                               ),
                             // Clear input button
-                            if (_sourceController.text.isNotEmpty || _selectedImage != null)
+                            if (_sourceController.text.isNotEmpty ||
+                                _selectedImage != null)
                               Positioned(
                                 bottom: 8,
                                 right: 64,
@@ -934,7 +950,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                             children: [
                               Container(
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade400),
+                                  border: Border.all(
+                                    color: Colors.grey.shade400,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                   color: Colors.blue[50],
                                 ),
@@ -951,9 +969,17 @@ class _TranslationScreenState extends State<TranslationScreen> {
                                     }
                                   },
                                   child: Markdown(
-                                    data: _convertToMarkdown(_translationResult),
-                                    selectable: false, // SelectionArea handles this
-                                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 48),
+                                    data: _convertToMarkdown(
+                                      _translationResult,
+                                    ),
+                                    selectable:
+                                        false, // SelectionArea handles this
+                                    padding: const EdgeInsets.fromLTRB(
+                                      12,
+                                      12,
+                                      12,
+                                      48,
+                                    ),
                                     styleSheet: MarkdownStyleSheet(
                                       p: const TextStyle(
                                         fontSize: 18,
@@ -1012,100 +1038,108 @@ class _TranslationScreenState extends State<TranslationScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Split button: Translate with dropdown menu
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _translate,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(4),
-                              bottomLeft: Radius.circular(4),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Split button: Translate with dropdown menu
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _translate,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(4),
+                                bottomLeft: Radius.circular(4),
+                              ),
                             ),
                           ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'Translate',
+                                  style: TextStyle(fontSize: 16),
+                                ),
                         ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Translate', style: TextStyle(fontSize: 16)),
                       ),
-                    ),
-                    PopupMenuButton<String>(
-                      enabled: !_isLoading,
-                      onSelected: (value) {
-                        if (value == 'speak') {
-                          _translateAndSpeak();
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'speak',
-                          child: Row(
-                            children: [
-                              Icon(Icons.record_voice_over),
-                              SizedBox(width: 8),
-                              Text('Translate & Speak'),
-                            ],
+                      PopupMenuButton<String>(
+                        enabled: !_isLoading,
+                        onSelected: (value) {
+                          if (value == 'speak') {
+                            _translateAndSpeak();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'speak',
+                            child: Row(
+                              children: [
+                                Icon(Icons.record_voice_over),
+                                SizedBox(width: 8),
+                                Text('Translate & Speak'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: _isLoading
+                                ? Theme.of(context).disabledColor
+                                : Theme.of(context).colorScheme.primary,
+                            borderRadius: const BorderRadius.only(
+                              topRight: Radius.circular(4),
+                              bottomRight: Radius.circular(4),
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Icon(
+                            Icons.arrow_drop_down,
+                            color: _isLoading
+                                ? Colors.grey
+                                : Theme.of(context).colorScheme.onPrimary,
                           ),
                         ),
-                      ],
-                      child: Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: _isLoading 
-                              ? Theme.of(context).disabledColor 
-                              : Theme.of(context).colorScheme.primary,
-                          borderRadius: const BorderRadius.only(
-                            topRight: Radius.circular(4),
-                            bottomRight: Radius.circular(4),
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Icon(
-                          Icons.arrow_drop_down,
-                          color: _isLoading 
-                              ? Colors.grey 
-                              : Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ],
+                  ),
+                  if (_errorMessage.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Card(
+                      color: Colors.red.shade50,
+                      elevation: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              color: Colors.red.shade700,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _errorMessage,
+                                style: TextStyle(
+                                  color: Colors.red.shade900,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ],
-                ),
-                if (_errorMessage.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Card(
-                    color: Colors.red.shade50,
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error_outline, color: Colors.red.shade700),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _errorMessage,
-                              style: TextStyle(
-                                color: Colors.red.shade900,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
-              ],
-            ),
+              ),
             ),
           ),
         ],
@@ -1137,10 +1171,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       // Get OpenAI API key and TTS voice setting
       final apiKey = await _settingsService.getApiKey(LLMProvider.openai);
-      
+
       if (apiKey.isEmpty) {
         setState(() {
-          _errorMessage = 'Please set your OpenAI API key in settings to use text-to-speech';
+          _errorMessage =
+              'Please set your OpenAI API key in settings to use text-to-speech';
           _isGeneratingTTS = false;
         });
         return;
@@ -1149,10 +1184,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
       final voice = await _settingsService.getTTSVoice();
 
       // Use selected text if available, otherwise use full translation
-      String textToSpeak = _selectedText.isNotEmpty 
-          ? _selectedText 
+      String textToSpeak = _selectedText.isNotEmpty
+          ? _selectedText
           : _translationResult;
-      
+
       // Remove T/N notes from speech output
       final tnPattern = RegExp(r'\(T/N:[^)]+\)');
       textToSpeak = textToSpeak.replaceAll(tnPattern, '');
@@ -1161,7 +1196,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       final truncatedText = textToSpeak.length > 4096
           ? textToSpeak.substring(0, 4096)
           : textToSpeak;
-      
+
       final audioPath = await _ttsService.generateSpeech(
         text: truncatedText,
         apiKey: apiKey,

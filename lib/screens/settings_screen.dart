@@ -16,7 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _grokKeyController = TextEditingController();
   final TextEditingController _openaiKeyController = TextEditingController();
   final TextEditingController _geminiKeyController = TextEditingController();
-  
+
   RegionalPreference _selectedRegionalPreference = RegionalPreference.none;
   TTSVoice _selectedTTSVoice = TTSVoice.alloy;
   bool _isLoading = true;
@@ -63,9 +63,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await _settingsService.setRegionalPreference(_selectedRegionalPreference);
       await _settingsService.setTTSVoice(_selectedTTSVoice);
-      await _settingsService.setApiKey(LLMProvider.grok, _grokKeyController.text);
-      await _settingsService.setApiKey(LLMProvider.openai, _openaiKeyController.text);
-      await _settingsService.setApiKey(LLMProvider.gemini, _geminiKeyController.text);
+      await _settingsService.setApiKey(
+        LLMProvider.grok,
+        _grokKeyController.text,
+      );
+      await _settingsService.setApiKey(
+        LLMProvider.openai,
+        _openaiKeyController.text,
+      );
+      await _settingsService.setApiKey(
+        LLMProvider.gemini,
+        _geminiKeyController.text,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             duration: Duration(seconds: 1),
           ),
         );
-        
+
         // Navigate back to the main screen after a short delay
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
@@ -107,7 +116,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           if (!_isLoading)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8.0,
+                vertical: 8.0,
+              ),
               child: _isSaving
                   ? const Center(
                       child: SizedBox(
@@ -136,16 +148,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const Text(
                     'Regional Preferences',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   DropdownButton<String>(
-                    value: _selectedRegionalPreference.toString().split('.').last,
+                    value: _selectedRegionalPreference
+                        .toString()
+                        .split('.')
+                        .last,
                     isExpanded: true,
-                    items: RegionalPreference.values.map((RegionalPreference preference) {
+                    items: RegionalPreference.values.map((
+                      RegionalPreference preference,
+                    ) {
                       return DropdownMenuItem<String>(
                         value: preference.toString().split('.').last,
                         child: Text(preference.name),
@@ -154,12 +168,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onChanged: (String? newValue) {
                       if (newValue != null) {
                         setState(() {
-                          _selectedRegionalPreference = RegionalPreferenceExtension.fromString(newValue);
+                          _selectedRegionalPreference =
+                              RegionalPreferenceExtension.fromString(newValue);
                         });
                       }
                     },
                   ),
-                  if (_selectedRegionalPreference != RegionalPreference.none) ...[
+                  if (_selectedRegionalPreference !=
+                      RegionalPreference.none) ...[
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -173,7 +189,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.info_outline, size: 20, color: Colors.blue.shade700),
+                              Icon(
+                                Icons.info_outline,
+                                size: 20,
+                                color: Colors.blue.shade700,
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 'Translator Notes Enabled',
@@ -187,20 +207,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 8),
                           Text(
                             'Translations will include T/N annotations for:',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             '• Currency → ${_selectedRegionalPreference.currency}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
                           ),
                           Text(
                             '• Units → ${_selectedRegionalPreference.unitSystem}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
                           ),
                           Text(
                             '• Cultural context hints',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
                           ),
                         ],
                       ),
@@ -209,10 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 24),
                   const Text(
                     'API Keys',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -250,18 +279,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 24),
                   const Text(
                     'Text-to-Speech Settings',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Requires OpenAI API key',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<TTSVoice>(

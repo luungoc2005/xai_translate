@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/llm_provider.dart';
 import '../models/regional_preference.dart';
 import '../models/tts_voice.dart';
+import '../models/conversation_message.dart';
 
 class SettingsService {
   static const String _providerKey = 'selected_provider';
@@ -10,6 +12,7 @@ class SettingsService {
   static const String _sourceLanguageKey = 'source_language';
   static const String _targetLanguageKey = 'target_language';
   static const String _ttsVoiceKey = 'tts_voice';
+  static const String _conversationMessagesKey = 'conversation_messages';
 
   Future<LLMProvider> getSelectedProvider() async {
     final prefs = await SharedPreferences.getInstance();
@@ -89,5 +92,37 @@ class SettingsService {
   Future<void> setTTSVoice(TTSVoice voice) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_ttsVoiceKey, voice.toString().split('.').last);
+  }
+
+  Future<List<ConversationMessage>> getConversationMessages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final messagesJson = prefs.getString(_conversationMessagesKey);
+    
+    if (messagesJson == null || messagesJson.isEmpty) {
+      return [];
+    }
+    
+    try {
+      final List<dynamic> decoded = jsonDecode(messagesJson);
+      return decoded.map((json) => ConversationMessage.fromJson(json)).toList();
+    } catch (e) {
+      // If parsing fails, return empty list
+      return [];
+    }
+  }
+
+  Future<void> saveConversationMessages(List<ConversationMessage> messages) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (messages.isEmpty) {
+      await prefs.remove(_conversationMessagesKey);
+    } else {
+      final messagesJson = jsonEncode(messages.map((m) => m.toJson()).toList());
+      await prefs.setString(_conversationMessagesKey, messagesJson);
+    }
+  }
+
+  Future<void> clearConversationMessages() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_conversationMessagesKey);
   }
 }

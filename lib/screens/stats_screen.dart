@@ -11,11 +11,11 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   final StatsService _statsService = StatsService();
-  
+
   LLMProvider? _selectedProvider;
   String _selectedLanguage = 'All';
   bool? _regionalPreferenceFilter;
-  
+
   Map<String, dynamic>? _currentStats;
   bool _isLoading = true;
 
@@ -64,7 +64,9 @@ class _StatsScreenState extends State<StatsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear All Statistics'),
-        content: const Text('Are you sure you want to clear all translation statistics? This cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to clear all translation statistics? This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -82,9 +84,9 @@ class _StatsScreenState extends State<StatsScreen> {
       await _statsService.clearStats();
       await _loadStats();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Statistics cleared')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Statistics cleared')));
       }
     }
   }
@@ -122,16 +124,18 @@ class _StatsScreenState extends State<StatsScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 'Filters',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
                           const SizedBox(height: 16),
-                          
+
                           // Provider Filter
-                          const Text('Provider:', style: TextStyle(fontWeight: FontWeight.w500)),
+                          const Text(
+                            'Provider:',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
                           const SizedBox(height: 8),
                           DropdownButton<LLMProvider?>(
                             value: _selectedProvider,
@@ -156,9 +160,12 @@ class _StatsScreenState extends State<StatsScreen> {
                             },
                           ),
                           const SizedBox(height: 16),
-                          
+
                           // Language Filter
-                          const Text('Source Language:', style: TextStyle(fontWeight: FontWeight.w500)),
+                          const Text(
+                            'Source Language:',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
                           const SizedBox(height: 8),
                           DropdownButton<String>(
                             value: _selectedLanguage,
@@ -179,9 +186,12 @@ class _StatsScreenState extends State<StatsScreen> {
                             },
                           ),
                           const SizedBox(height: 16),
-                          
+
                           // Regional Preference Filter
-                          const Text('Regional Preferences:', style: TextStyle(fontWeight: FontWeight.w500)),
+                          const Text(
+                            'Regional Preferences:',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
                           const SizedBox(height: 8),
                           DropdownButton<bool?>(
                             value: _regionalPreferenceFilter,
@@ -212,7 +222,7 @@ class _StatsScreenState extends State<StatsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Statistics Display
                   if (_currentStats != null) ...[
                     Card(
@@ -227,14 +237,13 @@ class _StatsScreenState extends State<StatsScreen> {
                                 const SizedBox(width: 8),
                                 Text(
                                   'Statistics',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 16),
-                            
+
                             if (_currentStats!['count'] == 0) ...[
                               const Center(
                                 child: Padding(
@@ -293,9 +302,10 @@ class _StatsScreenState extends State<StatsScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Text-Only Stats Card
-                    if (_currentStats != null && _currentStats!['textOnlyCount'] > 0) ...[
+                    if (_currentStats != null &&
+                        _currentStats!['textOnlyCount'] > 0) ...[
                       Card(
                         color: Colors.blue.shade50,
                         child: Padding(
@@ -305,14 +315,21 @@ class _StatsScreenState extends State<StatsScreen> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.text_fields, size: 20, color: Colors.blue),
+                                  const Icon(
+                                    Icons.text_fields,
+                                    size: 20,
+                                    color: Colors.blue,
+                                  ),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Text-Only Translations',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade900,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade900,
+                                        ),
                                   ),
                                 ],
                               ),
@@ -335,9 +352,10 @@ class _StatsScreenState extends State<StatsScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    
+
                     // Image-Only Stats Card
-                    if (_currentStats != null && _currentStats!['imageOnlyCount'] > 0) ...[
+                    if (_currentStats != null &&
+                        _currentStats!['imageOnlyCount'] > 0) ...[
                       Card(
                         color: Colors.purple.shade50,
                         child: Padding(
@@ -347,14 +365,21 @@ class _StatsScreenState extends State<StatsScreen> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.image, size: 20, color: Colors.purple),
+                                  const Icon(
+                                    Icons.image,
+                                    size: 20,
+                                    color: Colors.purple,
+                                  ),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Image-Only Translations',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.purple.shade900,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.purple.shade900,
+                                        ),
                                   ),
                                 ],
                               ),
@@ -377,7 +402,7 @@ class _StatsScreenState extends State<StatsScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    
+
                     // Provider Comparison Card (when no provider filter)
                     if (_selectedProvider == null) ...[
                       Card(
@@ -392,9 +417,10 @@ class _StatsScreenState extends State<StatsScreen> {
                                   const SizedBox(width: 8),
                                   Text(
                                     'Provider Comparison',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               ),
@@ -404,42 +430,58 @@ class _StatsScreenState extends State<StatsScreen> {
                                   future: _statsService.getProviderStats(
                                     provider: provider,
                                     sourceLanguage: _selectedLanguage,
-                                    regionalPreferenceEnabled: _regionalPreferenceFilter,
+                                    regionalPreferenceEnabled:
+                                        _regionalPreferenceFilter,
                                   ),
                                   builder: (context, snapshot) {
                                     if (!snapshot.hasData) {
                                       return const SizedBox.shrink();
                                     }
-                                    
+
                                     final stats = snapshot.data!;
                                     if (stats['count'] == 0) {
                                       return const SizedBox.shrink();
                                     }
-                                    
+
                                     return Column(
                                       children: [
                                         ListTile(
-                                          leading: Icon(Icons.dns, color: _getProviderColor(provider)),
+                                          leading: Icon(
+                                            Icons.dns,
+                                            color: _getProviderColor(provider),
+                                          ),
                                           title: Text(provider.name),
                                           subtitle: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Text('${stats['count']} total translations'),
+                                              Text(
+                                                '${stats['count']} total translations',
+                                              ),
                                               if (stats['textOnlyCount'] > 0)
                                                 Text(
                                                   'Text: ${stats['textOnlyCount']} (${stats['textOnlyAvgTime'].toStringAsFixed(0)} ms avg)',
-                                                  style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.blue.shade700,
+                                                  ),
                                                 ),
                                               if (stats['imageOnlyCount'] > 0)
                                                 Text(
                                                   'Images: ${stats['imageOnlyCount']} (${stats['imageOnlyAvgTime'].toStringAsFixed(0)} ms avg)',
-                                                  style: TextStyle(fontSize: 12, color: Colors.purple.shade700),
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color:
+                                                        Colors.purple.shade700,
+                                                  ),
                                                 ),
                                             ],
                                           ),
                                           trailing: Text(
                                             '${stats['avgResponseTime'].toStringAsFixed(0)} ms',
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                         if (provider != LLMProvider.values.last)
@@ -461,7 +503,12 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _buildStatRow(String label, String value, IconData icon, {bool isHighlight = false}) {
+  Widget _buildStatRow(
+    String label,
+    String value,
+    IconData icon, {
+    bool isHighlight = false,
+  }) {
     return Row(
       children: [
         Icon(icon, size: 20, color: isHighlight ? Colors.blue : Colors.grey),
@@ -469,10 +516,7 @@ class _StatsScreenState extends State<StatsScreen> {
         Expanded(
           child: Text(
             label,
-            style: TextStyle(
-              fontSize: 15,
-              color: Colors.grey.shade700,
-            ),
+            style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
           ),
         ),
         Text(

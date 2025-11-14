@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 import '../models/llm_provider.dart';
 import '../models/regional_preference.dart';
 import '../models/translation_stats.dart';
+import '../models/conversation_message.dart';
 
 class TranslationService {
   final http.Client client;
@@ -442,4 +443,377 @@ class TranslationService {
       throw Exception(_getUserFriendlyErrorMessage(e));
     }
   }
+
+  /// Translate text with conversation history context for better contextual translations in conversation mode
+  Future<String> translateInConversationMode({
+    required String text,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required LLMProvider provider,
+    required String apiKey,
+    RegionalPreference regionalPreference = RegionalPreference.none,
+    List<ConversationMessage> conversationHistory = const [],
+  }) async {
+    if (apiKey.isEmpty) {
+      throw Exception('API key is required');
+    }
+
+    if (text.isEmpty) {
+      return '';
+    }
+
+    switch (provider) {
+      case LLMProvider.grok:
+      case LLMProvider.openai:
+        return _translateInConversationModeOpenAICompatible(
+          text: text,
+          sourceLanguage: sourceLanguage,
+          targetLanguage: targetLanguage,
+          provider: provider,
+          apiKey: apiKey,
+          regionalPreference: regionalPreference,
+          conversationHistory: conversationHistory,
+        );
+      case LLMProvider.gemini:
+        return _translateInConversationModeGemini(
+          text: text,
+          sourceLanguage: sourceLanguage,
+          targetLanguage: targetLanguage,
+          apiKey: apiKey,
+          regionalPreference: regionalPreference,
+          conversationHistory: conversationHistory,
+        );
+    }
+  }
+
+  /// Auto-detect which of two languages the text is in and translate to the other in conversation mode
+  Future<Map<String, String>> translateInConversationModeWithAutoDetect({
+    required String text,
+    required String language1,
+    required String language2,
+    required LLMProvider provider,
+    required String apiKey,
+    RegionalPreference regionalPreference = RegionalPreference.none,
+    List<ConversationMessage> conversationHistory = const [],
+  }) async {
+    if (apiKey.isEmpty) {
+      throw Exception('API key is required');
+    }
+
+    if (text.isEmpty) {
+      return {'detectedLanguage': language1, 'translation': ''};
+    }
+
+    switch (provider) {
+      case LLMProvider.grok:
+      case LLMProvider.openai:
+        return _translateInConversationModeWithAutoDetectOpenAICompatible(
+          text: text,
+          language1: language1,
+          language2: language2,
+          provider: provider,
+          apiKey: apiKey,
+          regionalPreference: regionalPreference,
+          conversationHistory: conversationHistory,
+        );
+      case LLMProvider.gemini:
+        return _translateInConversationModeWithAutoDetectGemini(
+          text: text,
+          language1: language1,
+          language2: language2,
+          apiKey: apiKey,
+          regionalPreference: regionalPreference,
+          conversationHistory: conversationHistory,
+        );
+    }
+  }
+
+  Future<String> _translateInConversationModeOpenAICompatible({
+    required String text,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required LLMProvider provider,
+    required String apiKey,
+    RegionalPreference regionalPreference = RegionalPreference.none,
+    List<ConversationMessage> conversationHistory = const [],
+  }) async {
+    try {
+      final url = Uri.parse(provider.apiEndpoint);
+      
+      // Build system prompt with conversation history
+      String systemPrompt = 'You are a professional language translator in a conversation mode. Translate between $sourceLanguage and $targetLanguage.';
+      
+      if (regionalPreference != RegionalPreference.none) {
+        final currency = regionalPreference.currency;
+        final unitSystem = regionalPreference.unitSystem;
+        systemPrompt += '\n\nAdd translator notes (T/N) for currency (convert to $currency), units (convert to $unitSystem), and cultural context when relevant.';
+      }
+      
+      // Add conversation history to system prompt
+      if (conversationHistory.isNotEmpty) {
+        systemPrompt += '\n\nConversation history for context:';
+        for (final msg in conversationHistory) {
+          final role = msg.isUserInput ? 'User' : 'Assistant';
+          systemPrompt += '\n$role (${msg.language}): ${msg.text}';
+        }
+      }
+      
+      systemPrompt += '\n\nUse the conversation history above to maintain context and improve translation accuracy. Only respond with the translated text, nothing else.';
+      
+      // Build messages array with only system prompt and current message
+      final response = await client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: jsonEncode({
+          'model': provider.model,
+          'messages': [
+            {
+              'role': 'system',
+              'content': systemPrompt,
+            },
+            {
+              'role': 'user',
+              'content': '$sourceLanguage: $text',
+            },
+          ],
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['choices'][0]['message']['content'].toString().trim();
+      } else {
+        throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      throw Exception(_getUserFriendlyErrorMessage(e));
+    }
+  }
+
+  Future<String> _translateInConversationModeGemini({
+    required String text,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required String apiKey,
+    RegionalPreference regionalPreference = RegionalPreference.none,
+    List<ConversationMessage> conversationHistory = const [],
+  }) async {
+    try {
+      final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}/${LLMProvider.gemini.model}:generateContent?key=$apiKey');
+      
+      // Build system prompt with conversation history
+      String systemPrompt = 'You are a professional language translator in a conversation mode. Translate between $sourceLanguage and $targetLanguage.';
+      
+      if (regionalPreference != RegionalPreference.none) {
+        final currency = regionalPreference.currency;
+        final unitSystem = regionalPreference.unitSystem;
+        systemPrompt += '\n\nAdd translator notes (T/N) for currency (convert to $currency), units (convert to $unitSystem), and cultural context when relevant.';
+      }
+      
+      // Add conversation history to system prompt
+      if (conversationHistory.isNotEmpty) {
+        systemPrompt += '\n\nConversation history for context:';
+        for (final msg in conversationHistory) {
+          final role = msg.isUserInput ? 'User' : 'Assistant';
+          systemPrompt += '\n$role (${msg.language}): ${msg.text}';
+        }
+      }
+      
+      systemPrompt += '\n\nUse the conversation history above to maintain context and improve translation accuracy. Only respond with the translated text, nothing else.';
+      systemPrompt += '\n\nNow translate this message:';
+      
+      List<Map<String, dynamic>> parts = [
+        {'text': systemPrompt},
+        {'text': '$sourceLanguage: $text'},
+      ];
+      
+      final response = await client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': parts,
+            },
+          ],
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+      } else {
+        throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      throw Exception(_getUserFriendlyErrorMessage(e));
+    }
+  }
+
+  Future<Map<String, String>> _translateInConversationModeWithAutoDetectOpenAICompatible({
+    required String text,
+    required String language1,
+    required String language2,
+    required LLMProvider provider,
+    required String apiKey,
+    RegionalPreference regionalPreference = RegionalPreference.none,
+    List<ConversationMessage> conversationHistory = const [],
+  }) async {
+    try {
+      final url = Uri.parse(provider.apiEndpoint);
+      
+      // Build system prompt for auto-detection with conversation history
+      String systemPrompt = 'You are a professional language translator in a conversation mode. You will receive text in either $language1 or $language2, and you must:';
+      systemPrompt += '\n1. Detect which language the input text is in';
+      systemPrompt += '\n2. Translate it to the other language ($language1 -> $language2, or $language2 -> $language1)';
+      systemPrompt += '\n3. Respond in JSON format: {"detectedLanguage": "<detected language>", "translation": "<translated text>"}';
+      
+      if (regionalPreference != RegionalPreference.none) {
+        final currency = regionalPreference.currency;
+        final unitSystem = regionalPreference.unitSystem;
+        systemPrompt += '\n\nAdd translator notes (T/N) for currency (convert to $currency), units (convert to $unitSystem), and cultural context when relevant.';
+      }
+      
+      // Add conversation history to system prompt
+      if (conversationHistory.isNotEmpty) {
+        systemPrompt += '\n\nConversation history for context:';
+        for (final msg in conversationHistory) {
+          final role = msg.isUserInput ? 'User' : 'Assistant';
+          systemPrompt += '\n$role (${msg.language}): ${msg.text}';
+        }
+      }
+      
+      systemPrompt += '\n\nUse the conversation history above to maintain context and improve translation accuracy.';
+      
+      final response = await client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: jsonEncode({
+          'model': provider.model,
+          'messages': [
+            {
+              'role': 'system',
+              'content': systemPrompt,
+            },
+            {
+              'role': 'user',
+              'content': text,
+            },
+          ],
+          'response_format': {'type': 'json_object'},
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['choices'][0]['message']['content'].toString();
+        final result = jsonDecode(content);
+        return {
+          'detectedLanguage': result['detectedLanguage'].toString(),
+          'translation': result['translation'].toString(),
+        };
+      } else {
+        throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      throw Exception(_getUserFriendlyErrorMessage(e));
+    }
+  }
+
+  Future<Map<String, String>> _translateInConversationModeWithAutoDetectGemini({
+    required String text,
+    required String language1,
+    required String language2,
+    required String apiKey,
+    RegionalPreference regionalPreference = RegionalPreference.none,
+    List<ConversationMessage> conversationHistory = const [],
+  }) async {
+    try {
+      final url = Uri.parse('${LLMProvider.gemini.apiEndpoint}/${LLMProvider.gemini.model}:generateContent?key=$apiKey');
+      
+      // Build system prompt for auto-detection with conversation history
+      String systemPrompt = 'You are a professional language translator in a conversation mode. You will receive text in either $language1 or $language2, and you must:';
+      systemPrompt += '\n1. Detect which language the input text is in';
+      systemPrompt += '\n2. Translate it to the other language ($language1 -> $language2, or $language2 -> $language1)';
+      systemPrompt += '\n3. Respond in JSON format: {"detectedLanguage": "<detected language>", "translation": "<translated text>"}';
+      
+      if (regionalPreference != RegionalPreference.none) {
+        final currency = regionalPreference.currency;
+        final unitSystem = regionalPreference.unitSystem;
+        systemPrompt += '\n\nAdd translator notes (T/N) for currency (convert to $currency), units (convert to $unitSystem), and cultural context when relevant.';
+      }
+      
+      // Add conversation history to system prompt
+      if (conversationHistory.isNotEmpty) {
+        systemPrompt += '\n\nConversation history for context:';
+        for (final msg in conversationHistory) {
+          final role = msg.isUserInput ? 'User' : 'Assistant';
+          systemPrompt += '\n$role (${msg.language}): ${msg.text}';
+        }
+      }
+      
+      systemPrompt += '\n\nUse the conversation history above to maintain context and improve translation accuracy. IMPORTANT: Respond ONLY with valid JSON, no other text.';
+      systemPrompt += '\n\nNow detect the language and translate this message:';
+      
+      List<Map<String, dynamic>> parts = [
+        {'text': systemPrompt},
+        {'text': text},
+      ];
+      
+      final response = await client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': parts,
+            },
+          ],
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+        
+        // Try to parse JSON response
+        try {
+          final result = jsonDecode(content);
+          return {
+            'detectedLanguage': result['detectedLanguage'].toString(),
+            'translation': result['translation'].toString(),
+          };
+        } catch (e) {
+          // If JSON parsing fails, try to extract from text
+          // This is a fallback for when Gemini doesn't return pure JSON
+          final detectedMatch = RegExp(r'"detectedLanguage"\s*:\s*"([^"]+)"').firstMatch(content);
+          final translationMatch = RegExp(r'"translation"\s*:\s*"([^"]+)"').firstMatch(content);
+          
+          if (detectedMatch != null && translationMatch != null) {
+            return {
+              'detectedLanguage': detectedMatch.group(1)!,
+              'translation': translationMatch.group(1)!,
+            };
+          }
+          
+          throw Exception('Failed to parse auto-detect response from Gemini');
+        }
+      } else {
+        throw Exception('Translation failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      throw Exception(_getUserFriendlyErrorMessage(e));
+    }
+  }
 }
+
