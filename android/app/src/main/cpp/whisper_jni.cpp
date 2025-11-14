@@ -79,6 +79,7 @@ Java_com_example_xai_1translate_WhisperJNI_initContext(JNIEnv *env, jclass clazz
     LOGI("Loading model from: %s", path);
     
     struct whisper_context_params cparams = whisper_context_default_params();
+    cparams.use_gpu = true;  // Enable GPU acceleration if available
     struct whisper_context *ctx = whisper_init_from_file_with_params(path, cparams);
     
     env->ReleaseStringUTFChars(model_path, path);
@@ -116,7 +117,7 @@ Java_com_example_xai_1translate_WhisperJNI_transcribe(
     
     env->ReleaseStringUTFChars(audio_path, path);
     
-    // Setup whisper parameters - optimized for speed
+    // Setup whisper parameters
     struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
     wparams.print_realtime = false;
     wparams.print_progress = false;
@@ -124,13 +125,11 @@ Java_com_example_xai_1translate_WhisperJNI_transcribe(
     wparams.print_special = false;
     wparams.translate = false;
     wparams.language = nullptr;  // Auto-detect language (supports Chinese, English, etc.)
-    wparams.n_threads = 8;  // Increased from 4 to 8 for modern devices
+    wparams.n_threads = 8;
+    wparams.audio_ctx = 768;
     wparams.offset_ms = 0;
     wparams.no_context = true;
     wparams.single_segment = false;
-    wparams.audio_ctx = 512;  // Reduced from default (1500) for speed
-    wparams.suppress_blank = true;  // Skip silent segments
-    wparams.suppress_nst = false;  // Keep non-speech tokens enabled
     
     // Run inference
     if (whisper_full(ctx, wparams, pcmf32.data(), pcmf32.size()) != 0) {

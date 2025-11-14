@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/llm_provider.dart';
 import '../models/regional_preference.dart';
 import '../models/tts_voice.dart';
 import '../services/settings_service.dart';
+import '../services/backup_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -13,6 +15,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final SettingsService _settingsService = SettingsService();
+  final BackupService _backupService = BackupService();
   final TextEditingController _grokKeyController = TextEditingController();
   final TextEditingController _openaiKeyController = TextEditingController();
   final TextEditingController _geminiKeyController = TextEditingController();
@@ -106,6 +109,243 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isSaving = false;
       });
     }
+  }
+
+  Future<void> _pasteFromClipboard(TextEditingController controller) async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (clipboardData != null && clipboardData.text != null) {
+      setState(() {
+        controller.text = clipboardData.text!;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pasted from clipboard'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportData() async {
+    // Show summary dialog first
+    try {
+      final summary = await _backupService.getExportSummary();
+      
+      if (!mounted) return;
+      
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Export App Data'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('The following data will be exported:'),
+              const SizedBox(height: 16),
+              _buildSummaryItem('Settings', summary.settingsCount),
+              _buildSummaryItem('API Keys', summary.apiKeysCount),
+              _buildSummaryItem('Conversation Messages', summary.conversationMessagesCount),
+              _buildSummaryItem('Translation History', summary.historyCount),
+              _buildSummaryItem('Statistics', summary.statsCount),
+              const Divider(height: 24),
+              Text(
+                'Total: ${summary.totalItems} items',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Export'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true || !mounted) return;
+
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      final success = await _backupService.exportToFile();
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Data exported successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to export data'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close any open dialogs
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importData() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import App Data'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('⚠️ Warning: This will replace all current data with the imported data.'),
+            SizedBox(height: 16),
+            Text('This includes:'),
+            Text('• All settings'),
+            Text('• API keys'),
+            Text('• Conversation history'),
+            Text('• Translation history'),
+            Text('• Statistics'),
+            SizedBox(height: 16),
+            Text(
+              'Make sure to export your current data first if you want to keep it!',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      final result = await _backupService.importFromFile();
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (result.success) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Import Successful'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Data imported successfully!'),
+                if (result.importDate != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Backup date: ${result.importDate}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Text(
+                  'The app will reload to apply the changes.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Reload settings
+                  _loadSettings();
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close any open dialogs
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildSummaryItem(String label, int count) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Text(
+            count.toString(),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -246,33 +486,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 16),
                   TextField(
                     controller: _grokKeyController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Grok API Key',
                       hintText: 'Enter your Grok API key',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       helperText: 'Get your API key from x.ai',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.paste),
+                        onPressed: () => _pasteFromClipboard(_grokKeyController),
+                        tooltip: 'Paste from clipboard',
+                      ),
                     ),
                     obscureText: true,
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _openaiKeyController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'OpenAI API Key',
                       hintText: 'Enter your OpenAI API key',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       helperText: 'Get your API key from platform.openai.com',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.paste),
+                        onPressed: () => _pasteFromClipboard(_openaiKeyController),
+                        tooltip: 'Paste from clipboard',
+                      ),
                     ),
                     obscureText: true,
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _geminiKeyController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Gemini API Key',
                       hintText: 'Enter your Gemini API key',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       helperText: 'Get your API key from aistudio.google.com',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.paste),
+                        onPressed: () => _pasteFromClipboard(_geminiKeyController),
+                        tooltip: 'Paste from clipboard',
+                      ),
                     ),
                     obscureText: true,
                   ),

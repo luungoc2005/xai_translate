@@ -43,14 +43,18 @@ target_include_directories(whisper_flutter PRIVATE
 target_compile_definitions(whisper_flutter PUBLIC GGML_USE_CPU)
 target_compile_definitions(whisper_flutter PRIVATE WHISPER_VERSION="1.7.5")
 
-# Optimization flags for release builds
-if (NOT ${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    target_compile_options(whisper_flutter PRIVATE -O3 -funroll-loops)
-    target_compile_options(whisper_flutter PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
-else()
-    # Even debug builds should be reasonably fast
-    target_compile_options(whisper_flutter PRIVATE -O2)
-endif()
+# Optimization flags - always use aggressive optimization for Whisper
+# (Performance is critical for real-time transcription)
+target_compile_options(whisper_flutter PRIVATE 
+    -O3 
+    -funroll-loops
+    -ffast-math
+    -fno-finite-math-only
+)
+target_compile_options(whisper_flutter PRIVATE 
+    -fvisibility=hidden 
+    -fvisibility-inlines-hidden
+)
 
 # ARM-specific optimizations
 if (${ANDROID_ABI} STREQUAL "arm64-v8a")
