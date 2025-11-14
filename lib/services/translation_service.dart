@@ -77,6 +77,9 @@ class TranslationService {
       } else {
         instruction = 'Translate this image to $targetLanguage. Additional context: $text';
       }
+      
+      // Add menu-specific instruction
+      instruction += '\n\nIf the image happens to be a menu, keep the original dish names in parentheses next to the translated names. Example: "Translated Dish Name (Original Name)".';
     } else {
       if (sourceLanguage == null || sourceLanguage == 'Auto-detect') {
         instruction = 'Translate this text to $targetLanguage: $text';

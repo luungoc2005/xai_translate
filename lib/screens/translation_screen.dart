@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/llm_provider.dart';
 import '../models/translation_history_item.dart';
 import '../services/translation_service.dart';
@@ -26,7 +27,6 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final TextEditingController _sourceController = TextEditingController();
   final TextEditingController _targetController = TextEditingController();
   final FocusNode _sourceFocusNode = FocusNode();
-  final FocusNode _targetFocusNode = FocusNode();
   final TranslationService _translationService = TranslationService();
   final SettingsService _settingsService = SettingsService();
   final HistoryService _historyService = HistoryService();
@@ -48,12 +48,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
   Stream<double>? _amplitudeStream;
   bool _isInputFocused = false;
   bool _isFromWhisper = false;
-  bool _isOutputFocused = false;
   File? _selectedImage;
   late Stream<List<SharedMediaFile>> _sharedFilesStream;
   bool _isGeneratingTTS = false;
   bool _isPlayingTTS = false;
-  TextSelection? _outputTextSelection;
 
   final List<String> _sourceLanguages = [
     'Auto-detect',
@@ -99,17 +97,6 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _sourceFocusNode.addListener(() {
       setState(() {
         _isInputFocused = _sourceFocusNode.hasFocus;
-        if (_isInputFocused) {
-          _isOutputFocused = false;
-        }
-      });
-    });
-    _targetFocusNode.addListener(() {
-      setState(() {
-        _isOutputFocused = _targetFocusNode.hasFocus;
-        if (_isOutputFocused) {
-          _isInputFocused = false;
-        }
       });
     });
 
@@ -395,48 +382,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
     await _settingsService.setTargetLanguage(_targetLanguage);
   }
 
-  List<TextSpan> _buildFormattedTranslation(String text) {
-    final List<TextSpan> spans = [];
-    final tnPattern = RegExp(r'\(T/N:[^)]+\)');
-
-    int lastIndex = 0;
-    for (final match in tnPattern.allMatches(text)) {
-      // Add normal text before T/N
-      if (match.start > lastIndex) {
-        spans.add(
-          TextSpan(
-            text: text.substring(lastIndex, match.start),
-            style: const TextStyle(fontSize: 18, color: Colors.black87),
-          ),
-        );
-      }
-
-      // Add T/N with faded, smaller style
-      spans.add(
-        TextSpan(
-          text: match.group(0),
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade600,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      );
-
-      lastIndex = match.end;
-    }
-
-    // Add remaining text after last T/N
-    if (lastIndex < text.length) {
-      spans.add(
-        TextSpan(
-          text: text.substring(lastIndex),
-          style: const TextStyle(fontSize: 18, color: Colors.black87),
-        ),
-      );
-    }
-
-    return spans;
+  /// Convert translation text to markdown format
+  /// T/N notes are converted to italic text for markdown rendering
+  String _convertToMarkdown(String text) {
+    // Convert (T/N: ...) to italic text
+    final tnPattern = RegExp(r'\(T/N:([^)]+)\)');
+    
+    String markdownText = text.replaceAllMapped(tnPattern, (match) {
+      final note = match.group(1)?.trim() ?? '';
+      return '*T/N:$note*';
+    });
+    
+    return markdownText;
   }
 
   @override
@@ -518,10 +475,6 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   // Input focused - give more space to input
                   inputHeight = remainingHeight * 0.55;
                   outputHeight = remainingHeight * 0.45;
-                } else if (_isOutputFocused) {
-                  // Output focused - give more space to output
-                  inputHeight = remainingHeight * 0.35;
-                  outputHeight = remainingHeight * 0.65;
                 } else if (_selectedImage != null) {
                   // Image selected - smaller input, normal output
                   inputHeight = remainingHeight * 0.35;
@@ -865,30 +818,24 @@ class _TranslationScreenState extends State<TranslationScreen> {
                           child: Stack(
                             children: [
                               Container(
-                                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                                 decoration: BoxDecoration(
                                   border: Border.all(color: Colors.grey.shade400),
                                   borderRadius: BorderRadius.circular(4),
                                   color: Colors.blue[50],
                                 ),
-                                child: SingleChildScrollView(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      _targetFocusNode.requestFocus();
-                                    },
-                                    child: SelectableText.rich(
-                                      TextSpan(
-                                        children: _buildFormattedTranslation(
-                                          _translationResult,
-                                        ),
-                                      ),
-                                      focusNode: _targetFocusNode,
-                                      selectionControls: materialTextSelectionControls,
-                                      onSelectionChanged: (selection, cause) {
-                                        setState(() {
-                                          _outputTextSelection = selection;
-                                        });
-                                      },
+                                child: Markdown(
+                                  data: _convertToMarkdown(_translationResult),
+                                  selectable: true,
+                                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 48),
+                                  styleSheet: MarkdownStyleSheet(
+                                    p: const TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.black87,
+                                    ),
+                                    em: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600,
+                                      fontStyle: FontStyle.italic,
                                     ),
                                   ),
                                 ),
@@ -1043,7 +990,6 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _sourceController.dispose();
     _targetController.dispose();
     _sourceFocusNode.dispose();
-    _targetFocusNode.dispose();
     _voiceInputService.dispose();
     _audioPlayer.dispose();
     super.dispose();
@@ -1074,17 +1020,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       final voice = await _settingsService.getTTSVoice();
 
-      // Get selected text if available, otherwise use full translation
+      // Use full translation for TTS (strip T/N notes for cleaner speech)
       String textToSpeak = _translationResult;
       
-      if (_outputTextSelection != null && !_outputTextSelection!.isCollapsed) {
-        // Extract selected text from the translation
-        final start = _outputTextSelection!.start;
-        final end = _outputTextSelection!.end;
-        if (start >= 0 && end <= _translationResult.length) {
-          textToSpeak = _translationResult.substring(start, end);
-        }
-      }
+      // Remove T/N notes from speech output
+      final tnPattern = RegExp(r'\(T/N:[^)]+\)');
+      textToSpeak = textToSpeak.replaceAll(tnPattern, '');
 
       // Generate speech (truncate to OpenAI's 4096 character limit)
       final truncatedText = textToSpeak.length > 4096
