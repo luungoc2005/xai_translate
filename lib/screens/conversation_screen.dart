@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../models/conversation_message.dart';
@@ -6,6 +7,7 @@ import '../services/translation_service.dart';
 import '../services/settings_service.dart';
 import '../services/voice_input_service.dart';
 import '../services/tts_service.dart';
+import '../services/volume_service.dart';
 
 class ConversationScreen extends StatefulWidget {
   const ConversationScreen({super.key});
@@ -21,6 +23,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final SettingsService _settingsService = SettingsService();
   final VoiceInputService _voiceInputService = VoiceInputService();
   final TTSService _ttsService = TTSService();
+  final VolumeService _volumeService = VolumeService();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   String _language1 = 'English';
@@ -37,6 +40,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   String? _currentRecordingPath;
   double _recordingAmplitude = 0.0;
   Stream<double>? _amplitudeStream;
+  StreamSubscription? _playerCompleteSubscription;
 
   final List<String> _languages = [
     'English',
@@ -305,21 +309,30 @@ class _ConversationScreenState extends State<ConversationScreen> {
         voice: voice,
       );
 
+      // Handle volume control
+      await _volumeService.ensureVolumeIsAudible();
+
       setState(() {
         _isGeneratingTTS = false;
         _isPlayingTTS = true;
       });
 
+      // Cancel any existing subscription
+      await _playerCompleteSubscription?.cancel();
+
       // Play audio
       await _audioPlayer.play(DeviceFileSource(audioPath));
 
       // Listen for completion
-      _audioPlayer.onPlayerComplete.listen((_) {
+      _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((_) async {
         if (mounted) {
           setState(() {
             _isPlayingTTS = false;
           });
         }
+        
+        // Restore volume if needed
+        await _volumeService.restoreVolume();
       });
     } catch (e) {
       setState(() {
@@ -327,6 +340,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
         _isPlayingTTS = false;
         _errorMessage = 'Text-to-speech failed: ${e.toString()}';
       });
+      
+      // Restore volume on error if needed
+      await _volumeService.restoreVolume();
     }
   }
 
@@ -336,6 +352,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
     setState(() {
       _isPlayingTTS = false;
     });
+    
+    // Restore volume if needed
+    await _volumeService.restoreVolume();
   }
 
   void _scrollToBottom() {
@@ -852,6 +871,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   void dispose() {
+    _playerCompleteSubscription?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     _voiceInputService.dispose();

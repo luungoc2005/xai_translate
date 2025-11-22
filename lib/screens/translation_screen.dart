@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
@@ -12,6 +13,7 @@ import '../services/history_service.dart';
 import '../services/stats_service.dart';
 import '../services/voice_input_service.dart';
 import '../services/tts_service.dart';
+import '../services/volume_service.dart';
 import 'settings_screen.dart';
 import 'history_screen.dart';
 import 'stats_screen.dart';
@@ -33,6 +35,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final StatsService _statsService = StatsService();
   final VoiceInputService _voiceInputService = VoiceInputService();
   final TTSService _ttsService = TTSService();
+  final VolumeService _volumeService = VolumeService();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -55,6 +58,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   bool _isGeneratingTTS = false;
   bool _isPlayingTTS = false;
   String _selectedText = '';
+  StreamSubscription? _playerCompleteSubscription;
 
   final List<String> _sourceLanguages = [
     'Auto-detect',
@@ -1149,6 +1153,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
   @override
   void dispose() {
+    _playerCompleteSubscription?.cancel();
     _sourceController.dispose();
     _targetController.dispose();
     _sourceFocusNode.dispose();
@@ -1203,21 +1208,30 @@ class _TranslationScreenState extends State<TranslationScreen> {
         voice: voice,
       );
 
+      // Handle volume control
+      await _volumeService.ensureVolumeIsAudible();
+
       setState(() {
         _isGeneratingTTS = false;
         _isPlayingTTS = true;
       });
 
+      // Cancel any existing subscription
+      await _playerCompleteSubscription?.cancel();
+
       // Play audio
       await _audioPlayer.play(DeviceFileSource(audioPath));
 
       // Listen for completion
-      _audioPlayer.onPlayerComplete.listen((_) {
+      _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((_) async {
         if (mounted) {
           setState(() {
             _isPlayingTTS = false;
           });
         }
+        
+        // Restore volume if needed
+        await _volumeService.restoreVolume();
       });
     } catch (e) {
       setState(() {
@@ -1225,6 +1239,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
         _isPlayingTTS = false;
         _errorMessage = 'Text-to-speech failed: ${e.toString()}';
       });
+      
+      // Restore volume on error if needed
+      await _volumeService.restoreVolume();
     }
   }
 
@@ -1234,5 +1251,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
     setState(() {
       _isPlayingTTS = false;
     });
+    
+    // Restore volume if needed
+    await _volumeService.restoreVolume();
   }
 }

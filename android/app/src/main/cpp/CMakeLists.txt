@@ -2,21 +2,22 @@ cmake_minimum_required(VERSION 3.10)
 project(whisper_flutter)
 
 set(CMAKE_CXX_STANDARD 17)
-set(WHISPER_ROOT_DIR D:/projects/whisper.cpp)
+# Options for whisper.cpp
+set(WHISPER_BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
+set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "Build examples" FORCE)
+set(WHISPER_BUILD_SERVER OFF CACHE BOOL "Build server" FORCE)
 
-# Whisper source files
-set(WHISPER_SOURCES
-    ${WHISPER_ROOT_DIR}/src/whisper.cpp
-    ${CMAKE_SOURCE_DIR}/whisper_jni.cpp
-)
-
-# Create whisper library
-add_library(whisper_flutter SHARED ${WHISPER_SOURCES})
-
-# Fetch ggml dependency
+# Fetch whisper.cpp
 include(FetchContent)
-FetchContent_Declare(ggml SOURCE_DIR ${WHISPER_ROOT_DIR}/ggml)
-FetchContent_MakeAvailable(ggml)
+FetchContent_Declare(
+    whisper
+    GIT_REPOSITORY https://github.com/ggerganov/whisper.cpp.git
+    GIT_TAG        v1.8.2
+)
+FetchContent_MakeAvailable(whisper)
+
+# Create JNI library
+add_library(whisper_flutter SHARED whisper_jni.cpp)
 
 # Find required libraries
 find_library(LOG_LIB log)
@@ -24,24 +25,11 @@ find_library(ANDROID_LIB android)
 
 # Link libraries
 target_link_libraries(whisper_flutter 
+    PRIVATE 
+    whisper
     ${LOG_LIB}
     ${ANDROID_LIB}
-    ggml
 )
-
-# Include directories
-target_include_directories(whisper_flutter PRIVATE
-    ${WHISPER_ROOT_DIR}
-    ${WHISPER_ROOT_DIR}/include
-    ${WHISPER_ROOT_DIR}/src
-    ${WHISPER_ROOT_DIR}/ggml/include
-    ${WHISPER_ROOT_DIR}/ggml/src
-    ${WHISPER_ROOT_DIR}/ggml/src/ggml-cpu
-)
-
-# Compile definitions
-target_compile_definitions(whisper_flutter PUBLIC GGML_USE_CPU)
-target_compile_definitions(whisper_flutter PRIVATE WHISPER_VERSION="1.7.5")
 
 # Optimization flags - always use aggressive optimization for Whisper
 # (Performance is critical for real-time transcription)

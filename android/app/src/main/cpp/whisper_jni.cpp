@@ -80,6 +80,7 @@ Java_com_example_xai_1translate_WhisperJNI_initContext(JNIEnv *env, jclass clazz
     
     struct whisper_context_params cparams = whisper_context_default_params();
     cparams.use_gpu = true;  // Enable GPU acceleration if available
+    cparams.flash_attn = true; // Enable Flash Attention
     struct whisper_context *ctx = whisper_init_from_file_with_params(path, cparams);
     
     env->ReleaseStringUTFChars(model_path, path);
@@ -130,7 +131,6 @@ Java_com_example_xai_1translate_WhisperJNI_transcribe(
     wparams.offset_ms = 0;
     wparams.no_context = true;
     wparams.single_segment = false;
-    wparams.speed_up = true; // Enable speed-up (2x faster, slightly lower accuracy)
     
     // Run inference
     if (whisper_full(ctx, wparams, pcmf32.data(), pcmf32.size()) != 0) {
