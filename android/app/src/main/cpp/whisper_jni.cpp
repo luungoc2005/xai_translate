@@ -125,11 +125,12 @@ Java_com_example_xai_1translate_WhisperJNI_transcribe(
     wparams.print_special = false;
     wparams.translate = false;
     wparams.language = nullptr;  // Auto-detect language (supports Chinese, English, etc.)
-    wparams.n_threads = 8;
+    wparams.n_threads = 4; // Optimal for Pixel/Tensor chips (big.LITTLE)
     wparams.audio_ctx = 768;
     wparams.offset_ms = 0;
     wparams.no_context = true;
     wparams.single_segment = false;
+    wparams.speed_up = true; // Enable speed-up (2x faster, slightly lower accuracy)
     
     // Run inference
     if (whisper_full(ctx, wparams, pcmf32.data(), pcmf32.size()) != 0) {

@@ -59,8 +59,8 @@ target_compile_options(whisper_flutter PRIVATE
 # ARM-specific optimizations
 if (${ANDROID_ABI} STREQUAL "arm64-v8a")
     target_compile_options(whisper_flutter PRIVATE 
-        -march=armv8.2-a+fp16+dotprod  # Enable dot product instructions
-        -mtune=cortex-a76  # Optimize for modern ARM cores
+        -march=armv8.2-a+fp16+dotprod+i8mm  # Enable dot product and int8 matrix multiplication
+        -mtune=cortex-x3  # Optimize for modern ARM cores (Pixel 10 Pro)
     )
     target_compile_definitions(whisper_flutter PRIVATE GGML_USE_ARM_FP16)
 elseif (${ANDROID_ABI} STREQUAL "armeabi-v7a")
