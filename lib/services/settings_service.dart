@@ -11,6 +11,7 @@ class SettingsService {
   static const String _regionalPreferenceKey = 'regional_preference';
   static const String _sourceLanguageKey = 'source_language';
   static const String _targetLanguageKey = 'target_language';
+  static const String _nativeLanguageKey = 'native_language';
   static const String _ttsVoiceKey = 'tts_voice';
   static const String _conversationMessagesKey = 'conversation_messages';
 
@@ -76,6 +77,16 @@ class SettingsService {
   Future<void> setTargetLanguage(String language) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_targetLanguageKey, language);
+  }
+
+  Future<String> getNativeLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_nativeLanguageKey) ?? 'English'; // Default native language
+  }
+
+  Future<void> setNativeLanguage(String language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_nativeLanguageKey, language);
   }
 
   Future<TTSVoice> getTTSVoice() async {

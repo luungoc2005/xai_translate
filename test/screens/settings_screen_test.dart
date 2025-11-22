@@ -20,7 +20,7 @@ void main() {
       expect(find.text('Settings'), findsOneWidget);
     });
 
-    testWidgets('should display LLM provider selection', (WidgetTester tester) async {
+    testWidgets('should display Native Language selection', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: SettingsScreen(),
@@ -29,8 +29,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('LLM Provider'), findsOneWidget);
-      expect(find.byType(DropdownButton<String>), findsAtLeastNWidgets(1));
+      expect(find.text('Native Language'), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<String>), findsAtLeastNWidgets(1));
     });
 
     testWidgets('should display API key input fields', (WidgetTester tester) async {
@@ -53,10 +53,10 @@ void main() {
           home: SettingsScreen(),
         ),
       );
-      await tester.pump();
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(ElevatedButton, 'Save Settings'), findsOneWidget);
+      expect(find.text('Save'), findsOneWidget);
+      expect(find.byIcon(Icons.save), findsOneWidget);
     });
   });
 }

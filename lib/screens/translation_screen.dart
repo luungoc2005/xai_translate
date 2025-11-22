@@ -2,11 +2,14 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:gal/gal.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/llm_provider.dart';
 import '../models/translation_history_item.dart';
+import '../models/translation_stats.dart';
+import '../models/regional_preference.dart';
 import '../services/translation_service.dart';
 import '../services/settings_service.dart';
 import '../services/history_service.dart';
@@ -39,8 +42,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final ImagePicker _imagePicker = ImagePicker();
 
-  String _sourceLanguage = 'Auto-detect';
-  String _targetLanguage = 'English';
+  String _nativeLanguage = 'English';
+  String _selectedLanguage = 'Spanish';
   LLMProvider _selectedProvider = LLMProvider.grok;
   List<LLMProvider> _availableProviders = [];
   bool _isLoading = false;
@@ -60,26 +63,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   String _selectedText = '';
   StreamSubscription? _playerCompleteSubscription;
 
-  final List<String> _sourceLanguages = [
-    'Auto-detect',
-    'English',
-    'Spanish',
-    'French',
-    'German',
-    'Italian',
-    'Portuguese',
-    'Russian',
-    'Japanese',
-    'Chinese',
-    'Korean',
-    'Arabic',
-    'Hindi',
-    'Vietnamese',
-    'Malay',
-    'Indonesian',
-  ];
-
-  final List<String> _targetLanguages = [
+  final List<String> _languages = [
     'English',
     'Spanish',
     'French',
@@ -133,7 +117,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   }
 
   Future<void> _loadSavedLanguages() async {
-    final sourceLanguage = await _settingsService.getSourceLanguage();
+    final nativeLanguage = await _settingsService.getNativeLanguage();
     final targetLanguage = await _settingsService.getTargetLanguage();
     final selectedProvider = await _settingsService.getSelectedProvider();
 
@@ -154,9 +138,15 @@ class _TranslationScreenState extends State<TranslationScreen> {
       await _settingsService.setSelectedProvider(providerToUse);
     }
 
+    // Ensure selected language is not the same as native language if possible
+    var selectedLanguage = targetLanguage;
+    if (selectedLanguage == nativeLanguage) {
+      selectedLanguage = (nativeLanguage == 'Spanish') ? 'English' : 'Spanish';
+    }
+
     setState(() {
-      _sourceLanguage = sourceLanguage;
-      _targetLanguage = targetLanguage;
+      _nativeLanguage = nativeLanguage;
+      _selectedLanguage = selectedLanguage;
       _selectedProvider = providerToUse;
       _availableProviders = availableProviders;
     });
@@ -186,6 +176,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
         source: ImageSource.camera,
       );
       if (image != null) {
+        // Save to gallery so it can be synced
+        try {
+          // Check for access permission
+          final hasAccess = await Gal.hasAccess();
+          if (!hasAccess) {
+            await Gal.requestAccess();
+          }
+          await Gal.putImage(image.path);
+        } catch (e) {
+          debugPrint('Failed to save image to gallery: $e');
+        }
+
         setState(() {
           _selectedImage = File(image.path);
           _errorMessage = '';
@@ -275,19 +277,38 @@ class _TranslationScreenState extends State<TranslationScreen> {
         return;
       }
 
-      final result = await _translationService.translateWithStats(
+      final startTime = DateTime.now();
+      final wordCount = _translationService.countWords(_sourceController.text);
+
+      final result = await _translationService.translateInConversationModeWithAutoDetect(
         text: _sourceController.text,
-        sourceLanguage: _sourceLanguage,
-        targetLanguage: _targetLanguage,
+        language1: _nativeLanguage,
+        language2: _selectedLanguage,
         provider: provider,
         apiKey: apiKey,
         regionalPreference: regionalPreference,
+        userNativeLanguage: _nativeLanguage,
         image: _selectedImage,
-        isFromWhisper: _isFromWhisper,
       );
 
       final translation = result['translation'] as String;
-      final stats = result['stats'];
+      final detectedLanguage = result['detectedLanguage'] as String;
+      
+      final endTime = DateTime.now();
+      final responseTimeMs = endTime.difference(startTime).inMilliseconds;
+
+      final stats = TranslationStats(
+        provider: provider,
+        sourceLanguage: detectedLanguage,
+        wordCount: wordCount,
+        imageCount: _selectedImage != null ? 1 : 0,
+        responseTimeMs: responseTimeMs,
+        regionalPreferenceEnabled: regionalPreference != RegionalPreference.none,
+        timestamp: endTime,
+      );
+
+      // Determine target language based on detected language
+      final targetLanguage = detectedLanguage == _nativeLanguage ? _selectedLanguage : _nativeLanguage;
 
       // Save to history
       final historyItem = TranslationHistoryItem(
@@ -295,8 +316,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
             ? '[Image] ${_sourceController.text.isEmpty ? "Image translation" : _sourceController.text}'
             : _sourceController.text,
         translatedText: translation,
-        sourceLanguage: _sourceLanguage,
-        targetLanguage: _targetLanguage,
+        sourceLanguage: detectedLanguage,
+        targetLanguage: targetLanguage,
         timestamp: DateTime.now(),
       );
       await _historyService.addToHistory(historyItem);
@@ -430,28 +451,6 @@ class _TranslationScreenState extends State<TranslationScreen> {
     }
   }
 
-  void _swapLanguages() async {
-    // Don't swap if source is Auto-detect
-    if (_sourceLanguage == 'Auto-detect') {
-      return;
-    }
-
-    setState(() {
-      final temp = _sourceLanguage;
-      _sourceLanguage = _targetLanguage;
-      _targetLanguage = temp;
-
-      final tempText = _sourceController.text;
-      _sourceController.text = _targetController.text;
-      _targetController.text = tempText;
-      _translationResult = tempText;
-      _isFromWhisper = false;
-    });
-
-    // Save the swapped languages
-    await _settingsService.setSourceLanguage(_sourceLanguage);
-    await _settingsService.setTargetLanguage(_targetLanguage);
-  }
 
   /// Convert translation text to markdown format
   /// T/N notes are converted to italic text for markdown rendering
@@ -568,57 +567,35 @@ class _TranslationScreenState extends State<TranslationScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Language selection row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButton<String>(
-                              value: _sourceLanguage,
-                              isExpanded: true,
-                              items: _sourceLanguages.map((String language) {
-                                return DropdownMenuItem<String>(
-                                  value: language,
-                                  child: Text(language),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedLanguage,
+                            isExpanded: true,
+                            items: _languages.map((String language) {
+                              return DropdownMenuItem<String>(
+                                value: language,
+                                child: Text(language),
+                              );
+                            }).toList(),
+                            onChanged: (String? newValue) async {
+                              if (newValue != null && newValue != _nativeLanguage) {
+                                setState(() {
+                                  _selectedLanguage = newValue;
+                                });
+                                await _settingsService.setTargetLanguage(
+                                  newValue,
                                 );
-                              }).toList(),
-                              onChanged: (String? newValue) async {
-                                if (newValue != null) {
-                                  setState(() {
-                                    _sourceLanguage = newValue;
-                                  });
-                                  await _settingsService.setSourceLanguage(
-                                    newValue,
-                                  );
-                                }
-                              },
-                            ),
+                              }
+                            },
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.swap_horiz),
-                            onPressed: _swapLanguages,
-                          ),
-                          Expanded(
-                            child: DropdownButton<String>(
-                              value: _targetLanguage,
-                              isExpanded: true,
-                              items: _targetLanguages.map((String language) {
-                                return DropdownMenuItem<String>(
-                                  value: language,
-                                  child: Text(language),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) async {
-                                if (newValue != null) {
-                                  setState(() {
-                                    _targetLanguage = newValue;
-                                  });
-                                  await _settingsService.setTargetLanguage(
-                                    newValue,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 16),
                       // Image picker buttons

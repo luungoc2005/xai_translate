@@ -22,8 +22,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   RegionalPreference _selectedRegionalPreference = RegionalPreference.none;
   TTSVoice _selectedTTSVoice = TTSVoice.alloy;
+  String _nativeLanguage = 'English';
   bool _isLoading = true;
   bool _isSaving = false;
+
+  final List<String> _languages = [
+    'English',
+    'Spanish',
+    'French',
+    'German',
+    'Italian',
+    'Portuguese',
+    'Russian',
+    'Japanese',
+    'Chinese',
+    'Korean',
+    'Arabic',
+    'Hindi',
+    'Vietnamese',
+    'Malay',
+    'Indonesian',
+  ];
 
   @override
   void initState() {
@@ -39,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final regionalPreference = await _settingsService.getRegionalPreference();
       final ttsVoice = await _settingsService.getTTSVoice();
+      final nativeLanguage = await _settingsService.getNativeLanguage();
       final grokKey = await _settingsService.getApiKey(LLMProvider.grok);
       final openaiKey = await _settingsService.getApiKey(LLMProvider.openai);
       final geminiKey = await _settingsService.getApiKey(LLMProvider.gemini);
@@ -46,6 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _selectedRegionalPreference = regionalPreference;
         _selectedTTSVoice = ttsVoice;
+        _nativeLanguage = nativeLanguage;
         _grokKeyController.text = grokKey;
         _openaiKeyController.text = openaiKey;
         _geminiKeyController.text = geminiKey;
@@ -66,6 +87,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await _settingsService.setRegionalPreference(_selectedRegionalPreference);
       await _settingsService.setTTSVoice(_selectedTTSVoice);
+      await _settingsService.setNativeLanguage(_nativeLanguage);
       await _settingsService.setApiKey(
         LLMProvider.grok,
         _grokKeyController.text,
@@ -386,6 +408,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const Text(
+                    'General Settings',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _nativeLanguage,
+                    decoration: const InputDecoration(
+                      labelText: 'Native Language',
+                      border: OutlineInputBorder(),
+                      helperText: 'Your primary language for translations',
+                    ),
+                    items: _languages.map((String language) {
+                      return DropdownMenuItem<String>(
+                        value: language,
+                        child: Text(language),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _nativeLanguage = newValue;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 24),
                   const Text(
                     'Regional Preferences',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),

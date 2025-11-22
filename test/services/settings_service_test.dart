@@ -287,5 +287,28 @@ void main() {
       // Assert
       expect(voice, TTSVoice.onyx);
     });
+
+    test('should return English as default native language', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      final nativeLanguage = await settingsService.getNativeLanguage();
+
+      // Assert
+      expect(nativeLanguage, 'English');
+    });
+
+    test('should save and retrieve native language', () async {
+      // Arrange
+      // Mock already set up in setUp()
+      
+      // Act
+      await settingsService.setNativeLanguage('French');
+      final nativeLanguage = await settingsService.getNativeLanguage();
+
+      // Assert
+      expect(nativeLanguage, 'French');
+    });
   });
 }

@@ -26,8 +26,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final VolumeService _volumeService = VolumeService();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  String _language1 = 'English';
-  String _language2 = 'English';
+  String _nativeLanguage = 'English';
+  String _selectedLanguage = 'Spanish';
   LLMProvider _selectedProvider = LLMProvider.grok;
   List<LLMProvider> _availableProviders = [];
   List<ConversationMessage> _messages = [];
@@ -69,14 +69,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _loadSettings() async {
     final selectedProvider = await _settingsService.getSelectedProvider();
 
-    // Load languages from translate tab settings
-    final sourceLanguage = await _settingsService.getSourceLanguage();
+    // Load native language from settings
+    final nativeLanguage = await _settingsService.getNativeLanguage();
+    
+    // Load target language (selected language)
     final targetLanguage = await _settingsService.getTargetLanguage();
     
-    // For conversation mode, we need two specific languages (not Auto-detect)
-    // If source is Auto-detect, use English as first language
-    final lang1 = (sourceLanguage == 'Auto-detect') ? 'English' : sourceLanguage;
-    final lang2 = targetLanguage;
+    // Ensure selected language is not the same as native language if possible
+    // If targetLanguage is same as native, try to pick another one or default to Spanish
+    var selectedLanguage = targetLanguage;
+    if (selectedLanguage == nativeLanguage) {
+      selectedLanguage = (nativeLanguage == 'Spanish') ? 'English' : 'Spanish';
+    }
 
     // Load persisted conversation messages
     final savedMessages = await _settingsService.getConversationMessages();
@@ -99,8 +103,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
 
     setState(() {
-      _language1 = lang1;
-      _language2 = lang2;
+      _nativeLanguage = nativeLanguage;
+      _selectedLanguage = selectedLanguage;
       _messages = savedMessages;
       _selectedProvider = providerToUse;
       _availableProviders = availableProviders;
@@ -149,11 +153,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
       // Auto-detect and translate with context
       final result = await _translationService.translateInConversationModeWithAutoDetect(
         text: text,
-        language1: _language1,
-        language2: _language2,
+        language1: _nativeLanguage,
+        language2: _selectedLanguage,
         provider: provider,
         apiKey: apiKey,
         regionalPreference: regionalPreference,
+        userNativeLanguage: _nativeLanguage,
         conversationHistory: recentMessages,
       );
 
@@ -161,7 +166,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       final translation = result['translation'] as String;
 
       // Determine target language
-      final targetLanguage = detectedLanguage == _language1 ? _language2 : _language1;
+      final targetLanguage = detectedLanguage == _nativeLanguage ? _selectedLanguage : _nativeLanguage;
 
       // Create a single message with both original and translation
       final userMessage = ConversationMessage(
@@ -378,11 +383,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Widget _buildMessageBubble(ConversationMessage message) {
-    // Blue bubble for language1, grey for language2
-    final isLanguage1 = message.language == _language1;
-    // Blue bubbles (language1) are right-aligned, grey bubbles (language2) are left-aligned
-    final alignment = isLanguage1 ? Alignment.centerRight : Alignment.centerLeft;
-    final color = isLanguage1 ? Colors.blue.shade100 : Colors.grey.shade200;
+    // Blue bubble for native language, grey for selected language
+    final isNative = message.language == _nativeLanguage;
+    // Blue bubbles (native) are right-aligned, grey bubbles (selected) are left-aligned
+    final alignment = isNative ? Alignment.centerRight : Alignment.centerLeft;
+    final color = isNative ? Colors.blue.shade100 : Colors.grey.shade200;
 
     return Align(
       alignment: alignment,
@@ -440,7 +445,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
-                      color: isLanguage1 ? Colors.blue.shade300 : Colors.grey.shade400,
+                      color: isNative ? Colors.blue.shade300 : Colors.grey.shade400,
                       width: 1,
                     ),
                   ),
@@ -538,61 +543,41 @@ class _ConversationScreenState extends State<ConversationScreen> {
         children: [
           // Language selection bar
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               border: Border(
                 bottom: BorderSide(color: Colors.grey.shade300),
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: _language1,
-                    isExpanded: true,
-                    items: _languages.map((String language) {
-                      return DropdownMenuItem<String>(
-                        value: language,
-                        child: Text(language),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null && newValue != _language2) {
-                        setState(() {
-                          _language1 = newValue;
-                        });
-                      }
-                    },
-                  ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedLanguage,
+                  isExpanded: true,
+                  items: _languages.map((String language) {
+                    return DropdownMenuItem<String>(
+                      value: language,
+                      child: Text(language),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    if (newValue != null && newValue != _nativeLanguage) {
+                      setState(() {
+                        _selectedLanguage = newValue;
+                      });
+                      // Update target language in settings
+                      _settingsService.setTargetLanguage(newValue);
+                    }
+                  },
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Icon(
-                    Icons.arrow_forward,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: _language2,
-                    isExpanded: true,
-                    items: _languages.map((String language) {
-                      return DropdownMenuItem<String>(
-                        value: language,
-                        child: Text(language),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null && newValue != _language1) {
-                        setState(() {
-                          _language2 = newValue;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           // Provider selection
