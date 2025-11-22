@@ -561,7 +561,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 child: DropdownButton<String>(
                   value: _selectedLanguage,
                   isExpanded: true,
-                  items: _languages.map((String language) {
+                  items: _languages
+                      .where((lang) => lang != _nativeLanguage)
+                      .map((String language) {
                     return DropdownMenuItem<String>(
                       value: language,
                       child: Text(language),

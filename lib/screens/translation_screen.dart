@@ -498,7 +498,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
+              ).then((_) => _loadSavedLanguages());
             },
             tooltip: 'Settings',
           ),
@@ -578,7 +578,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                           child: DropdownButton<String>(
                             value: _selectedLanguage,
                             isExpanded: true,
-                            items: _languages.map((String language) {
+                            items: _languages
+                                .where((lang) => lang != _nativeLanguage)
+                                .map((String language) {
                               return DropdownMenuItem<String>(
                                 value: language,
                                 child: Text(language),
