@@ -5,9 +5,12 @@ import 'package:permission_handler/permission_handler.dart';
 
 /// Service for handling voice input and transcription using platform speech-to-text
 class VoiceInputService {
-  final SpeechToText _speechToText = SpeechToText();
+  final SpeechToText _speechToText;
   bool _isInitialized = false;
   StreamController<double>? _amplitudeController;
+  
+  VoiceInputService({SpeechToText? speechToText}) 
+      : _speechToText = speechToText ?? SpeechToText();
   
   // State for continuous listening
   bool _isExplicitlyStopped = false;

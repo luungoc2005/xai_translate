@@ -1,293 +1,156 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:xai_translate/services/voice_input_service.dart';
-import 'dart:io';
 
+@GenerateMocks([SpeechToText])
 import 'voice_input_service_test.mocks.dart';
 
-@GenerateMocks([WhisperClient, VoiceRecorder])
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('VoiceInputService', () {
     late VoiceInputService voiceInputService;
-    late MockWhisperClient mockWhisperClient;
-    late MockVoiceRecorder mockVoiceRecorder;
+    late MockSpeechToText mockSpeechToText;
 
     setUp(() {
-      mockWhisperClient = MockWhisperClient();
-      mockVoiceRecorder = MockVoiceRecorder();
-      voiceInputService = VoiceInputService(
-        whisperClient: mockWhisperClient,
-        audioRecorder: mockVoiceRecorder,
-      );
+      // Mock permission handler channel
+      const MethodChannel('flutter.baseflow.com/permissions/methods')
+          .setMockMethodCallHandler((MethodCall methodCall) async {
+        if (methodCall.method == 'checkPermissionStatus') {
+          return 1; // PermissionStatus.granted
+        }
+        return null;
+      });
+
+      mockSpeechToText = MockSpeechToText();
+      voiceInputService = VoiceInputService(speechToText: mockSpeechToText);
     });
 
     tearDown(() {
       voiceInputService.dispose();
     });
 
-    group('Recording', () {
-      test('should start recording when startRecording is called', () async {
-        // Arrange
-        when(mockVoiceRecorder.startRecording(any))
-            .thenAnswer((_) async => Future.value());
-        when(mockVoiceRecorder.isRecording()).thenReturn(false);
+    test('initialize should call SpeechToText.initialize', () async {
+      when(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).thenAnswer((_) async => true);
 
-        // Act
-        await voiceInputService.startRecording();
+      final result = await voiceInputService.initialize();
 
-        // Assert
-        verify(mockVoiceRecorder.startRecording(any)).called(1);
-      });
-
-      test('should stop recording when stopRecording is called', () async {
-        // Arrange
-        const recordedFilePath = '/tmp/audio_recording.wav';
-        when(mockVoiceRecorder.stopRecording())
-            .thenAnswer((_) async => recordedFilePath);
-        when(mockVoiceRecorder.isRecording()).thenReturn(true);
-
-        // Act
-        final path = await voiceInputService.stopRecording();
-
-        // Assert
-        expect(path, recordedFilePath);
-        verify(mockVoiceRecorder.stopRecording()).called(1);
-      });
-
-      test('should throw exception when stopping recording that was never started', () async {
-        // Arrange
-        when(mockVoiceRecorder.isRecording()).thenReturn(false);
-
-        // Act & Assert
-        expect(
-          () => voiceInputService.stopRecording(),
-          throwsA(isA<StateError>()),
-        );
-      });
-
-      test('should throw exception when starting recording while already recording', () async {
-        // Arrange
-        when(mockVoiceRecorder.isRecording()).thenReturn(true);
-
-        // Act & Assert
-        expect(
-          () => voiceInputService.startRecording(),
-          throwsA(isA<StateError>()),
-        );
-      });
-
-      test('should return correct recording status', () {
-        // Arrange
-        when(mockVoiceRecorder.isRecording()).thenReturn(true);
-
-        // Act
-        final isRecording = voiceInputService.isRecording;
-
-        // Assert
-        expect(isRecording, true);
-      });
+      expect(result, true);
+      verify(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).called(1);
     });
 
-    group('Transcription', () {
-      test('should transcribe audio file using Whisper', () async {
-        // Arrange
-        const audioPath = '/tmp/test_audio.wav';
-        const expectedTranscription = 'Hello world';
-        when(mockWhisperClient.transcribe(audioPath))
-            .thenAnswer((_) async => expectedTranscription);
+    test('startListening should initialize and start listening', () async {
+      when(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).thenAnswer((_) async => true);
 
-        // Act
-        final transcription = await voiceInputService.transcribeAudio(audioPath);
+      when(mockSpeechToText.listen(
+        onResult: anyNamed('onResult'),
+        listenFor: anyNamed('listenFor'),
+        pauseFor: anyNamed('pauseFor'),
+        localeId: anyNamed('localeId'),
+        onSoundLevelChange: anyNamed('onSoundLevelChange'),
+        cancelOnError: anyNamed('cancelOnError'),
+        partialResults: anyNamed('partialResults'),
+        onDevice: anyNamed('onDevice'),
+        listenMode: anyNamed('listenMode'),
+        sampleRate: anyNamed('sampleRate'),
+      )).thenAnswer((_) async => null);
+      
+      when(mockSpeechToText.locales()).thenAnswer((_) async => []);
 
-        // Assert
-        expect(transcription, expectedTranscription);
-        verify(mockWhisperClient.transcribe(audioPath)).called(1);
-      });
+      await voiceInputService.startListening(onResult: (_) {});
 
-      test('should throw exception when audio file does not exist', () async {
-        // Arrange
-        const audioPath = '/tmp/nonexistent.wav';
+      verify(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).called(1);
 
-        // Act & Assert
-        expect(
-          () => voiceInputService.transcribeAudio(audioPath),
-          throwsA(isA<FileSystemException>()),
-        );
-      });
-
-      test('should handle Whisper transcription errors', () async {
-        // Arrange
-        const audioPath = '/tmp/test_audio.wav';
-        when(mockWhisperClient.transcribe(audioPath))
-            .thenThrow(Exception('Whisper transcription failed'));
-
-        // Act & Assert
-        expect(
-          () => voiceInputService.transcribeAudio(audioPath),
-          throwsException,
-        );
-      });
-
-      test('should return empty string for silent audio', () async {
-        // Arrange
-        const audioPath = '/tmp/silent_audio.wav';
-        when(mockWhisperClient.transcribe(audioPath))
-            .thenAnswer((_) async => '');
-
-        // Act
-        final transcription = await voiceInputService.transcribeAudio(audioPath);
-
-        // Assert
-        expect(transcription, '');
-      });
-
-      test('should handle multi-language transcription', () async {
-        // Arrange
-        const audioPath = '/tmp/multilang_audio.wav';
-        const expectedTranscription = 'Bonjour, comment ça va?';
-        when(mockWhisperClient.transcribe(audioPath))
-            .thenAnswer((_) async => expectedTranscription);
-
-        // Act
-        final transcription = await voiceInputService.transcribeAudio(audioPath);
-
-        // Assert
-        expect(transcription, expectedTranscription);
-      });
+      verify(mockSpeechToText.listen(
+        onResult: anyNamed('onResult'),
+        listenFor: anyNamed('listenFor'),
+        pauseFor: anyNamed('pauseFor'),
+        localeId: anyNamed('localeId'),
+        onSoundLevelChange: anyNamed('onSoundLevelChange'),
+        cancelOnError: anyNamed('cancelOnError'),
+        partialResults: anyNamed('partialResults'),
+        onDevice: anyNamed('onDevice'),
+        listenMode: anyNamed('listenMode'),
+        sampleRate: anyNamed('sampleRate'),
+      )).called(1);
     });
 
-    group('Record and Transcribe', () {
-      test('should record and transcribe in one operation', () async {
-        // Arrange
-        const recordedFilePath = '/tmp/audio_recording.wav';
-        const expectedTranscription = 'This is a test';
-        
-        when(mockVoiceRecorder.isRecording()).thenReturn(false);
-        when(mockVoiceRecorder.startRecording(any))
-            .thenAnswer((_) async => Future.value());
-        when(mockVoiceRecorder.stopRecording())
-            .thenAnswer((_) async => recordedFilePath);
-        when(mockWhisperClient.transcribe(recordedFilePath))
-            .thenAnswer((_) async => expectedTranscription);
+    test('stopListening should call SpeechToText.cancel', () async {
+      when(mockSpeechToText.cancel()).thenAnswer((_) async => null);
 
-        // Act
-        await voiceInputService.startRecording();
-        final path = await voiceInputService.stopRecording();
-        final transcription = await voiceInputService.transcribeAudio(path);
+      await voiceInputService.stopListening();
 
-        // Assert
-        expect(transcription, expectedTranscription);
-        verify(mockVoiceRecorder.startRecording(any)).called(1);
-        verify(mockVoiceRecorder.stopRecording()).called(1);
-        verify(mockWhisperClient.transcribe(recordedFilePath)).called(1);
-      });
-
-      test('should handle recording errors gracefully', () async {
-        // Arrange
-        when(mockVoiceRecorder.isRecording()).thenReturn(false);
-        when(mockVoiceRecorder.startRecording(any))
-            .thenThrow(Exception('Microphone access denied'));
-
-        // Act & Assert
-        expect(
-          () => voiceInputService.startRecording(),
-          throwsException,
-        );
-      });
+      verify(mockSpeechToText.cancel()).called(1);
     });
 
-    group('Model Management', () {
-      test('should check if Whisper model is available', () async {
-        // Arrange
-        when(mockWhisperClient.isModelAvailable())
-            .thenAnswer((_) async => true);
+    test('isRecording should return SpeechToText.isListening', () {
+      when(mockSpeechToText.isListening).thenReturn(true);
+      expect(voiceInputService.isRecording, true);
 
-        // Act
-        final isAvailable = await voiceInputService.isWhisperModelAvailable();
-
-        // Assert
-        expect(isAvailable, true);
-      });
-
-      test('should return false when Whisper model is not available', () async {
-        // Arrange
-        when(mockWhisperClient.isModelAvailable())
-            .thenThrow(Exception('Model not found'));
-
-        // Act
-        final isAvailable = await voiceInputService.isWhisperModelAvailable();
-
-        // Assert
-        expect(isAvailable, false);
-      });
+      when(mockSpeechToText.isListening).thenReturn(false);
+      expect(voiceInputService.isRecording, false);
     });
+    
+    test('startListening with language should map to correct locale', () async {
+      when(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).thenAnswer((_) async => true);
 
-    group('Cleanup', () {
-      test('should dispose resources properly', () async {
-        // Arrange
-        when(mockVoiceRecorder.dispose())
-            .thenAnswer((_) async => Future.value());
+      when(mockSpeechToText.listen(
+        onResult: anyNamed('onResult'),
+        listenFor: anyNamed('listenFor'),
+        pauseFor: anyNamed('pauseFor'),
+        localeId: anyNamed('localeId'),
+        onSoundLevelChange: anyNamed('onSoundLevelChange'),
+        cancelOnError: anyNamed('cancelOnError'),
+        partialResults: anyNamed('partialResults'),
+        onDevice: anyNamed('onDevice'),
+        listenMode: anyNamed('listenMode'),
+        sampleRate: anyNamed('sampleRate'),
+      )).thenAnswer((_) async => null);
+      
+      when(mockSpeechToText.locales()).thenAnswer((_) async => []);
 
-        // Act
-        await voiceInputService.dispose();
+      await voiceInputService.startListening(
+        onResult: (_) {},
+        language: 'Spanish',
+      );
 
-        // Assert
-        verify(mockVoiceRecorder.dispose()).called(1);
-      });
-
-      test('should delete temporary audio files after transcription', () async {
-        // Arrange
-        const audioPath = '/tmp/test_audio.wav';
-        const transcription = 'Test transcription';
-        
-        when(mockWhisperClient.transcribe(audioPath))
-            .thenAnswer((_) async => transcription);
-
-        // Act
-        final result = await voiceInputService.transcribeAudio(audioPath);
-        await voiceInputService.cleanupAudioFile(audioPath);
-
-        // Assert
-        expect(result, transcription);
-        // In real implementation, verify file deletion
-      });
-    });
-
-    group('Permission Handling', () {
-      test('should check microphone permission before recording', () async {
-        // Act
-        final hasPermission = await voiceInputService.checkMicrophonePermission();
-
-        // Assert
-        expect(hasPermission, isA<bool>());
-      });
-
-      test('should request microphone permission if not granted', () async {
-        // Act
-        final granted = await voiceInputService.requestMicrophonePermission();
-
-        // Assert
-        expect(granted, isA<bool>());
-      });
-    });
-
-    group('Error Handling', () {
-      test('should provide detailed error message for transcription failure', () async {
-        // Arrange
-        const audioPath = '/tmp/corrupted_audio.wav';
-        const errorMessage = 'Audio format not supported';
-        when(mockWhisperClient.transcribe(audioPath))
-            .thenThrow(Exception(errorMessage));
-
-        // Act & Assert
-        try {
-          await voiceInputService.transcribeAudio(audioPath);
-          fail('Should have thrown an exception');
-        } catch (e) {
-          expect(e.toString(), contains(errorMessage));
-        }
-      });
+      verify(mockSpeechToText.listen(
+        onResult: anyNamed('onResult'),
+        listenFor: anyNamed('listenFor'),
+        pauseFor: anyNamed('pauseFor'),
+        localeId: 'es_ES', // Should map Spanish to es_ES
+        onSoundLevelChange: anyNamed('onSoundLevelChange'),
+        cancelOnError: anyNamed('cancelOnError'),
+        partialResults: anyNamed('partialResults'),
+        onDevice: anyNamed('onDevice'),
+        listenMode: anyNamed('listenMode'),
+        sampleRate: anyNamed('sampleRate'),
+      )).called(1);
     });
   });
 }

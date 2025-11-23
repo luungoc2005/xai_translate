@@ -3,11 +3,13 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i3;
+import 'dart:async' as _i4;
 
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i4;
-import 'package:xai_translate/services/voice_input_service.dart' as _i2;
+import 'package:mockito/src/dummies.dart' as _i3;
+import 'package:speech_to_text/speech_to_text.dart' as _i2;
+import 'package:speech_to_text_platform_interface/speech_to_text_platform_interface.dart'
+    as _i5;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -24,88 +26,187 @@ import 'package:xai_translate/services/voice_input_service.dart' as _i2;
 // ignore_for_file: subtype_of_sealed_class
 // ignore_for_file: invalid_use_of_internal_member
 
-/// A class which mocks [WhisperClient].
+/// A class which mocks [SpeechToText].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockWhisperClient extends _i1.Mock implements _i2.WhisperClient {
-  MockWhisperClient() {
+class MockSpeechToText extends _i1.Mock implements _i2.SpeechToText {
+  MockSpeechToText() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i3.Future<String> transcribe(String? audioPath) =>
+  bool get hasRecognized =>
+      (super.noSuchMethod(Invocation.getter(#hasRecognized), returnValue: false)
+          as bool);
+
+  @override
+  String get lastRecognizedWords =>
       (super.noSuchMethod(
-            Invocation.method(#transcribe, [audioPath]),
-            returnValue: _i3.Future<String>.value(
-              _i4.dummyValue<String>(
-                this,
-                Invocation.method(#transcribe, [audioPath]),
-              ),
+            Invocation.getter(#lastRecognizedWords),
+            returnValue: _i3.dummyValue<String>(
+              this,
+              Invocation.getter(#lastRecognizedWords),
             ),
           )
-          as _i3.Future<String>);
+          as String);
 
   @override
-  _i3.Future<bool> isModelAvailable() =>
+  String get lastStatus =>
       (super.noSuchMethod(
-            Invocation.method(#isModelAvailable, []),
-            returnValue: _i3.Future<bool>.value(false),
-          )
-          as _i3.Future<bool>);
-}
-
-/// A class which mocks [VoiceRecorder].
-///
-/// See the documentation for Mockito's code generation for more information.
-class MockVoiceRecorder extends _i1.Mock implements _i2.VoiceRecorder {
-  MockVoiceRecorder() {
-    _i1.throwOnMissingStub(this);
-  }
-
-  @override
-  _i3.Future<void> startRecording(String? outputPath) =>
-      (super.noSuchMethod(
-            Invocation.method(#startRecording, [outputPath]),
-            returnValue: _i3.Future<void>.value(),
-            returnValueForMissingStub: _i3.Future<void>.value(),
-          )
-          as _i3.Future<void>);
-
-  @override
-  _i3.Future<String> stopRecording() =>
-      (super.noSuchMethod(
-            Invocation.method(#stopRecording, []),
-            returnValue: _i3.Future<String>.value(
-              _i4.dummyValue<String>(
-                this,
-                Invocation.method(#stopRecording, []),
-              ),
+            Invocation.getter(#lastStatus),
+            returnValue: _i3.dummyValue<String>(
+              this,
+              Invocation.getter(#lastStatus),
             ),
           )
-          as _i3.Future<String>);
+          as String);
 
   @override
-  bool isRecording() =>
+  double get lastSoundLevel =>
+      (super.noSuchMethod(Invocation.getter(#lastSoundLevel), returnValue: 0.0)
+          as double);
+
+  @override
+  bool get isAvailable =>
+      (super.noSuchMethod(Invocation.getter(#isAvailable), returnValue: false)
+          as bool);
+
+  @override
+  bool get isListening =>
+      (super.noSuchMethod(Invocation.getter(#isListening), returnValue: false)
+          as bool);
+
+  @override
+  bool get isNotListening =>
       (super.noSuchMethod(
-            Invocation.method(#isRecording, []),
+            Invocation.getter(#isNotListening),
             returnValue: false,
           )
           as bool);
 
   @override
-  _i3.Stream<double> getAmplitudeStream() =>
-      (super.noSuchMethod(
-            Invocation.method(#getAmplitudeStream, []),
-            returnValue: _i3.Stream<double>.empty(),
-          )
-          as _i3.Stream<double>);
+  bool get hasError =>
+      (super.noSuchMethod(Invocation.getter(#hasError), returnValue: false)
+          as bool);
 
   @override
-  _i3.Future<void> dispose() =>
+  _i4.Future<bool> get hasPermission =>
       (super.noSuchMethod(
-            Invocation.method(#dispose, []),
-            returnValue: _i3.Future<void>.value(),
-            returnValueForMissingStub: _i3.Future<void>.value(),
+            Invocation.getter(#hasPermission),
+            returnValue: _i4.Future<bool>.value(false),
           )
-          as _i3.Future<void>);
+          as _i4.Future<bool>);
+
+  @override
+  set errorListener(_i2.SpeechErrorListener? value) => super.noSuchMethod(
+    Invocation.setter(#errorListener, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set statusListener(_i2.SpeechStatusListener? value) => super.noSuchMethod(
+    Invocation.setter(#statusListener, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set unexpectedPhraseAggregator(_i2.SpeechPhraseAggregator? value) =>
+      super.noSuchMethod(
+        Invocation.setter(#unexpectedPhraseAggregator, value),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  _i4.Future<bool> initialize({
+    _i2.SpeechErrorListener? onError,
+    _i2.SpeechStatusListener? onStatus,
+    dynamic debugLogging = false,
+    Duration? finalTimeout = const Duration(milliseconds: 2000),
+    List<_i5.SpeechConfigOption>? options,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#initialize, [], {
+              #onError: onError,
+              #onStatus: onStatus,
+              #debugLogging: debugLogging,
+              #finalTimeout: finalTimeout,
+              #options: options,
+            }),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<void> stop() =>
+      (super.noSuchMethod(
+            Invocation.method(#stop, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> cancel() =>
+      (super.noSuchMethod(
+            Invocation.method(#cancel, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<dynamic> listen({
+    _i2.SpeechResultListener? onResult,
+    Duration? listenFor,
+    Duration? pauseFor,
+    String? localeId,
+    _i2.SpeechSoundLevelChange? onSoundLevelChange,
+    dynamic cancelOnError = false,
+    dynamic partialResults = true,
+    dynamic onDevice = false,
+    _i5.ListenMode? listenMode = _i5.ListenMode.confirmation,
+    dynamic sampleRate = 0,
+    _i5.SpeechListenOptions? listenOptions,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#listen, [], {
+              #onResult: onResult,
+              #listenFor: listenFor,
+              #pauseFor: pauseFor,
+              #localeId: localeId,
+              #onSoundLevelChange: onSoundLevelChange,
+              #cancelOnError: cancelOnError,
+              #partialResults: partialResults,
+              #onDevice: onDevice,
+              #listenMode: listenMode,
+              #sampleRate: sampleRate,
+              #listenOptions: listenOptions,
+            }),
+            returnValue: _i4.Future<dynamic>.value(),
+          )
+          as _i4.Future<dynamic>);
+
+  @override
+  void changePauseFor(Duration? pauseFor) => super.noSuchMethod(
+    Invocation.method(#changePauseFor, [pauseFor]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i4.Future<List<_i2.LocaleName>> locales() =>
+      (super.noSuchMethod(
+            Invocation.method(#locales, []),
+            returnValue: _i4.Future<List<_i2.LocaleName>>.value(
+              <_i2.LocaleName>[],
+            ),
+          )
+          as _i4.Future<List<_i2.LocaleName>>);
+
+  @override
+  _i4.Future<_i2.LocaleName?> systemLocale() =>
+      (super.noSuchMethod(
+            Invocation.method(#systemLocale, []),
+            returnValue: _i4.Future<_i2.LocaleName?>.value(),
+          )
+          as _i4.Future<_i2.LocaleName?>);
 }
