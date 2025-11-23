@@ -379,6 +379,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
           });
         },
         language: _nativeLanguage,
+        alternativeLocales: [_selectedLanguage],
+        prioritizeAlternatives: false,
       );
 
       // Listen to amplitude for volume visualization

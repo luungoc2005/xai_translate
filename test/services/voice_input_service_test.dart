@@ -3,8 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:speech_to_text/speech_recognition_error.dart';
-import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:xai_translate/services/voice_input_service.dart';
 
 @GenerateMocks([SpeechToText])
@@ -28,11 +26,17 @@ void main() {
       });
 
       mockSpeechToText = MockSpeechToText();
-      voiceInputService = VoiceInputService(speechToText: mockSpeechToText);
+      voiceInputService = VoiceInputService(
+        speechToText: mockSpeechToText,
+        isAndroid: false,
+      );
     });
 
     tearDown(() {
       voiceInputService.dispose();
+      // Clear mock handlers
+      const MethodChannel('com.example.xai_translate/speech')
+          .setMockMethodCallHandler(null);
     });
 
     test('initialize should call SpeechToText.initialize', () async {
@@ -151,6 +155,88 @@ void main() {
         listenMode: anyNamed('listenMode'),
         sampleRate: anyNamed('sampleRate'),
       )).called(1);
+    });
+  });
+
+  group('Native Android Support', () {
+    late VoiceInputService androidService;
+    late MockSpeechToText mockSpeechToText;
+    late List<MethodCall> log;
+
+    setUp(() {
+      log = <MethodCall>[];
+      mockSpeechToText = MockSpeechToText();
+      const MethodChannel('com.example.xai_translate/speech')
+          .setMockMethodCallHandler((MethodCall methodCall) async {
+        log.add(methodCall);
+        return null;
+      });
+
+      androidService = VoiceInputService(
+        speechToText: mockSpeechToText,
+        isAndroid: true,
+      );
+    });
+
+    test('startListening with alternatives should call native channel', () async {
+      when(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).thenAnswer((_) async => true);
+
+      await androidService.startListening(
+        onResult: (_) {},
+        language: 'English',
+        alternativeLocales: ['Japanese'],
+      );
+
+      expect(log, hasLength(1));
+      expect(log.first.method, 'startListening');
+      // Default: prioritizeAlternatives = false, so Primary (English) first
+      expect(log.first.arguments['locales'], ['en-US', 'ja-JP']);
+    });
+
+    test('startListening with prioritizeAlternatives should reorder locales', () async {
+      when(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).thenAnswer((_) async => true);
+
+      await androidService.startListening(
+        onResult: (_) {},
+        language: 'English',
+        alternativeLocales: ['Japanese'],
+        prioritizeAlternatives: true,
+      );
+
+      expect(log, hasLength(1));
+      expect(log.first.method, 'startListening');
+      // Prioritize alternatives: Japanese first, then English
+      expect(log.first.arguments['locales'], ['ja-JP', 'en-US']);
+    });
+
+    test('stopListening should call native stop', () async {
+      // First start listening to set _usingNativeAndroid = true
+      when(mockSpeechToText.initialize(
+        onError: anyNamed('onError'),
+        onStatus: anyNamed('onStatus'),
+        debugLogging: anyNamed('debugLogging'),
+      )).thenAnswer((_) async => true);
+
+      await androidService.startListening(
+        onResult: (_) {},
+        language: 'English',
+        alternativeLocales: ['Japanese'],
+      );
+      
+      log.clear(); // Clear start log
+
+      await androidService.stopListening();
+
+      expect(log, hasLength(1));
+      expect(log.first.method, 'stopListening');
     });
   });
 }

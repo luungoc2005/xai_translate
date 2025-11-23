@@ -212,6 +212,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
           });
         },
         language: _nativeLanguage,
+        alternativeLocales: [_selectedLanguage],
+        prioritizeAlternatives: true,
       );
 
       // Listen to amplitude for volume visualization
