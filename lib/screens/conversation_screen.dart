@@ -37,7 +37,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
   bool _isGeneratingTTS = false;
   bool _isPlayingTTS = false;
   String _errorMessage = '';
-  String? _currentRecordingPath;
   double _recordingAmplitude = 0.0;
   Stream<double>? _amplitudeStream;
   StreamSubscription? _playerCompleteSubscription;
@@ -202,9 +201,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
         _isRecording = true;
         _errorMessage = '';
         _recordingAmplitude = 0.0;
+        // Optional: Clear text when starting new recording
+        // _inputController.clear();
       });
 
-      await _voiceInputService.startRecording();
+      await _voiceInputService.startListening(
+        onResult: (text) {
+          setState(() {
+            _inputController.text = text;
+          });
+        },
+        language: _nativeLanguage,
+      );
 
       // Listen to amplitude for volume visualization
       _amplitudeStream = _voiceInputService.getAmplitudeStream();
@@ -223,59 +231,28 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
-  /// Stop voice recording and transcribe
+  /// Stop voice recording
   Future<void> _stopVoiceInput() async {
     if (!_isRecording) return;
 
     try {
+      await _voiceInputService.stopListening();
+
       setState(() {
         _isRecording = false;
-        _isTranscribing = true;
-      });
-
-      // Stop recording and get file path
-      _currentRecordingPath = await _voiceInputService.stopRecording();
-
-      // Check if Whisper model is available
-      final isModelAvailable = await _voiceInputService.isWhisperModelAvailable();
-      if (!isModelAvailable) {
-        setState(() {
-          _isTranscribing = false;
-          _errorMessage =
-              'Whisper model not available. Please download a model file and place it in app documents/whisper/ directory.';
-        });
-        return;
-      }
-
-      // Transcribe audio
-      final transcription = await _voiceInputService.transcribeAudio(
-        _currentRecordingPath!,
-      );
-
-      setState(() {
         _isTranscribing = false;
       });
 
-      // Clean up audio file
-      await _voiceInputService.cleanupAudioFile(_currentRecordingPath!);
-      _currentRecordingPath = null;
-
       // Send the transcribed message
-      if (transcription.isNotEmpty) {
-        await _sendMessage(transcription);
+      if (_inputController.text.isNotEmpty) {
+        await _sendMessage(_inputController.text);
       }
     } catch (e) {
       setState(() {
         _isTranscribing = false;
         _isRecording = false;
-        _errorMessage = 'Transcription failed: ${e.toString()}';
+        _errorMessage = 'Error stopping recording: ${e.toString()}';
       });
-
-      // Try to clean up on error
-      if (_currentRecordingPath != null) {
-        await _voiceInputService.cleanupAudioFile(_currentRecordingPath!);
-        _currentRecordingPath = null;
-      }
     }
   }
 

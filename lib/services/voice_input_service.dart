@@ -1,320 +1,295 @@
-import 'dart:io';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:path_provider/path_provider.dart';
+import 'dart:async';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart' as record_pkg;
-import 'package:path/path.dart' as path;
-import 'whisper_platform.dart';
 
-/// Service for handling voice input and transcription using local Whisper model
+/// Service for handling voice input and transcription using platform speech-to-text
 class VoiceInputService {
-  final WhisperClient whisperClient;
-  final VoiceRecorder audioRecorder;
+  final SpeechToText _speechToText = SpeechToText();
+  bool _isInitialized = false;
+  StreamController<double>? _amplitudeController;
   
-  VoiceInputService({
-    WhisperClient? whisperClient,
-    VoiceRecorder? audioRecorder,
-  })  : whisperClient = whisperClient ?? OnDeviceWhisperClient(),
-        audioRecorder = audioRecorder ?? FlutterAudioRecorder();
+  // State for continuous listening
+  bool _isExplicitlyStopped = false;
+  bool _isRestarting = false;
+  String _accumulatedText = '';
+  String _currentWords = '';
+  Function(String)? _lastOnResult;
+  String? _lastLanguage;
 
-  /// Check if currently recording
-  bool get isRecording => audioRecorder.isRecording();
+  /// Check if currently recording/listening
+  bool get isRecording => _speechToText.isListening;
 
   /// Get audio amplitude stream for volume visualization
   Stream<double> getAmplitudeStream() {
-    return audioRecorder.getAmplitudeStream();
+    _amplitudeController ??= StreamController<double>.broadcast();
+    return _amplitudeController!.stream;
   }
 
-  /// Start recording audio from microphone
-  Future<void> startRecording() async {
-    if (isRecording) {
-      throw StateError('Recording is already in progress');
+  /// Initialize the speech recognition service
+  Future<bool> initialize() async {
+    if (!_isInitialized) {
+      _isInitialized = await _speechToText.initialize(
+        onError: _onError,
+        onStatus: _onStatus,
+        debugLogging: true,
+      );
     }
+    return _isInitialized;
+  }
 
-    // Check permission first
-    final hasPermission = await checkMicrophonePermission();
-    if (!hasPermission) {
-      final granted = await requestMicrophonePermission();
-      if (!granted) {
+  void _onError(SpeechRecognitionError error) {
+    print('Speech recognition error: ${error.errorMsg} (permanent: ${error.permanent})');
+  }
+
+  void _onStatus(String status) {
+    print('Speech recognition status: $status');
+    if ((status == 'done' || status == 'notListening') && !_isExplicitlyStopped && _isInitialized && !_isRestarting) {
+       _restartListening();
+    }
+  }
+
+  void _restartListening() {
+    if (_isRestarting) return;
+    _isRestarting = true;
+    
+    // Manually accumulate current words before restarting to ensure they aren't lost
+    if (_currentWords.isNotEmpty) {
+      if (_accumulatedText.isNotEmpty) {
+        _accumulatedText += ' ';
+      }
+      _accumulatedText += _currentWords;
+      _currentWords = '';
+      
+      // Notify listener with updated accumulated text
+      if (_lastOnResult != null) {
+         _lastOnResult!(_accumulatedText);
+      }
+    }
+    
+    Future.delayed(const Duration(milliseconds: 50), () async {
+         if (!_isExplicitlyStopped) {
+            print('Restarting listening session...');
+            try {
+              // Use cancel to avoid duplicate final results since we manually accumulated
+              await _speechToText.cancel();
+            } catch (e) {
+              print('Error canceling before restart: $e');
+            }
+            
+            await _startListeningInternal();
+         }
+         _isRestarting = false;
+    });
+  }
+
+  final Map<String, String> _localeMap = {
+    'English': 'en_US',
+    'Spanish': 'es_ES',
+    'French': 'fr_FR',
+    'German': 'de_DE',
+    'Italian': 'it_IT',
+    'Portuguese': 'pt_PT',
+    'Russian': 'ru_RU',
+    'Japanese': 'ja_JP',
+    'Chinese': 'zh_CN',
+    'Korean': 'ko_KR',
+    'Arabic': 'ar_SA',
+    'Hindi': 'hi_IN',
+    'Vietnamese': 'vi_VN',
+    'Malay': 'ms_MY',
+    'Indonesian': 'id_ID',
+  };
+
+  /// Start listening for speech and stream results
+  Future<void> startListening({
+    required Function(String) onResult,
+    String? language,
+  }) async {
+    // Request permission if not granted
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
+      if (!status.isGranted) {
         throw Exception('Microphone permission denied');
       }
     }
 
-    final tempDir = await getTemporaryDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final outputPath = '${tempDir.path}/recording_$timestamp.wav';
-    
-    await audioRecorder.startRecording(outputPath);
-  }
-
-  /// Stop recording and return the file path
-  Future<String> stopRecording() async {
-    if (!isRecording) {
-      throw StateError('No recording in progress');
-    }
-
-    final filePath = await audioRecorder.stopRecording();
-    return filePath;
-  }
-
-  /// Transcribe audio file using Whisper model
-  Future<String> transcribeAudio(String audioPath) async {
-    // Check if file exists
-    final file = File(audioPath);
-    if (!await file.exists()) {
-      throw FileSystemException('Audio file not found', audioPath);
-    }
-
-    try {
-      final transcription = await whisperClient.transcribe(audioPath);
-      return transcription.trim();
-    } catch (e) {
-      throw Exception('Transcription failed: ${e.toString()}');
-    }
-  }
-
-  /// Check if Whisper model is available
-  Future<bool> isWhisperModelAvailable() async {
-    try {
-      return await whisperClient.isModelAvailable();
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Check if microphone permission is granted
-  Future<bool> checkMicrophonePermission() async {
-    final status = await Permission.microphone.status;
-    return status.isGranted;
-  }
-
-  /// Request microphone permission
-  Future<bool> requestMicrophonePermission() async {
-    final status = await Permission.microphone.request();
-    return status.isGranted;
-  }
-
-  /// Clean up temporary audio file
-  Future<void> cleanupAudioFile(String audioPath) async {
-    try {
-      final file = File(audioPath);
-      if (await file.exists()) {
-        await file.delete();
+    if (!_isInitialized) {
+      final initialized = await initialize();
+      if (!initialized) {
+        throw Exception('Failed to initialize speech recognition');
       }
-    } catch (e) {
-      // Log error but don't throw - cleanup is non-critical
-      print('Failed to cleanup audio file: $e');
     }
+
+    // Reset state
+    _isExplicitlyStopped = false;
+    _isRestarting = false;
+    _accumulatedText = '';
+    _currentWords = '';
+    _lastOnResult = onResult;
+    _lastLanguage = language;
+
+    await _startListeningInternal();
+  }
+
+  Future<void> _startListeningInternal() async {
+    if (_isInitialized) {
+      try {
+        String? localeId;
+        String? language = _lastLanguage;
+        
+        // Try to find the best matching locale
+        if (language != null) {
+          var mapped = _localeMap[language];
+          if (mapped != null) {
+            try {
+              var locales = await _speechToText.locales();
+              if (locales.any((l) => l.localeId == mapped)) {
+                localeId = mapped;
+              } else {
+                // Fallback to matching language code
+                var langCode = mapped.split('_')[0];
+                var match = locales.cast<LocaleName?>().firstWhere(
+                  (l) => l!.localeId.startsWith(langCode),
+                  orElse: () => null
+                );
+                if (match != null) {
+                    localeId = match.localeId;
+                    print('Mapped locale $mapped not found, using $localeId');
+                } else {
+                    localeId = mapped;
+                    print('No matching locale found for $langCode, using $mapped');
+                }
+              }
+            } catch (e) {
+              print('Error getting locales: $e');
+              localeId = mapped; // Fallback to mapped even if check fails
+            }
+          }
+        }
+        
+        print('Starting listening with locale: $localeId (language: $language)');
+
+        await _speechToText.listen(
+          onResult: (result) {
+            if (_isExplicitlyStopped || _isRestarting) return;
+
+            print('Speech result: ${result.recognizedWords} (final: ${result.finalResult})');
+            
+            String newWords = result.recognizedWords;
+            
+            // Workaround for Android SpeechRecognizer dropping text on final result
+            // If the final result is significantly shorter than the last partial, keep the partial
+            if (result.finalResult && _currentWords.length > newWords.length + 5) {
+               print('Detected text drop in final result. Using last partial: "$_currentWords" vs "$newWords"');
+               newWords = _currentWords;
+            }
+            
+            _currentWords = newWords;
+            String total = _accumulatedText;
+            if (total.isNotEmpty && _currentWords.isNotEmpty) {
+               total += ' ';
+            }
+            total += _currentWords;
+            
+            if (_lastOnResult != null) {
+               _lastOnResult!(total);
+            }
+            
+            if (result.finalResult) {
+               _accumulatedText = total;
+               _currentWords = '';
+            }
+          },
+          onSoundLevelChange: (level) {
+             if (_amplitudeController != null && !_amplitudeController!.isClosed) {
+               // Android might return dB values (e.g. -2 to 10)
+               // Normalize assuming range -2 to 10 roughly
+               double normalized;
+               if (level > 0) {
+                  normalized = (level / 10.0).clamp(0.0, 1.0);
+               } else {
+                  // Map -2..0 to 0..0.2
+                  normalized = ((level + 2) / 10.0).clamp(0.0, 1.0);
+               }
+               
+               // Boost the signal for better visibility
+               // Apply a curve to make lower values more visible
+               // y = x^0.5 (square root) boosts small values
+               if (normalized > 0) {
+                 normalized = (normalized * 2.0).clamp(0.0, 1.0);
+               }
+               
+               _amplitudeController!.add(normalized);
+             }
+          },
+          localeId: localeId,
+          onDevice: true,
+          listenFor: const Duration(seconds: 300), // Increased to 5 minutes
+          pauseFor: const Duration(seconds: 5),
+          partialResults: true,
+          cancelOnError: false,
+          listenMode: ListenMode.dictation,
+        );
+      } catch (e) {
+        print('Error starting speech listen: $e');
+      }
+    }
+  }
+
+  /// Stop listening
+  Future<void> stopListening() async {
+    _isExplicitlyStopped = true;
+    
+    // Commit current partial text to ensure we don't lose it or get it replaced by a truncated final result
+    if (_currentWords.isNotEmpty) {
+       if (_accumulatedText.isNotEmpty) {
+         _accumulatedText += ' ';
+       }
+       _accumulatedText += _currentWords;
+       _currentWords = '';
+       
+       if (_lastOnResult != null) {
+          _lastOnResult!(_accumulatedText);
+       }
+    }
+
+    // Use cancel instead of stop to prevent the engine from sending a "final" result 
+    // that might be truncated/segmented.
+    await _speechToText.cancel();
   }
 
   /// Dispose resources
   Future<void> dispose() async {
-    await audioRecorder.dispose();
+    await _speechToText.cancel();
+    await _amplitudeController?.close();
   }
-}
 
-/// Interface for Whisper client implementation
-abstract class WhisperClient {
-  Future<String> transcribe(String audioPath);
-  Future<bool> isModelAvailable();
-}
+  /// Check if model is available (kept for compatibility)
+  Future<bool> isWhisperModelAvailable() async {
+    return true;
+  }
 
-/// Interface for audio recorder implementation
-abstract class VoiceRecorder {
-  Future<void> startRecording(String outputPath);
-  Future<String> stopRecording();
-  bool isRecording();
-  Stream<double> getAmplitudeStream();
-  Future<void> dispose();
-}
-
-/// On-device Whisper implementation using native platform integration
-/// This loads a pre-compiled Whisper model and runs inference locally
-class OnDeviceWhisperClient implements WhisperClient {
-  final WhisperPlatform _platform = WhisperPlatform();
-  bool _isInitialized = false;
-  String? _modelPath;
-
-  OnDeviceWhisperClient();
-
-  /// Initialize the Whisper model
-  Future<void> initialize() async {
-    if (_isInitialized) return;
-
-    try {
-      // Copy model from assets to documents if not exists
-      await _ensureModelExists();
-      
-      if (_modelPath == null) {
-        throw Exception('Model file not found');
-      }
-      
-      // Initialize native Whisper context
-      final success = await _platform.initialize(_modelPath!);
-      if (!success) {
-        throw Exception('Failed to initialize Whisper context');
-      }
-      
-      _isInitialized = true;
-      print('Whisper initialized successfully with model: $_modelPath');
-    } catch (e) {
-      print('Failed to initialize Whisper: $e');
-      _isInitialized = false;
-      rethrow;
-    }
+  /// Clean up audio file (kept for compatibility)
+  Future<void> cleanupAudioFile(String audioPath) async {
+    // No-op
   }
   
-  /// Ensure model file exists in documents directory
-  Future<void> _ensureModelExists() async {
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final whisperDir = Directory(path.join(appDir.path, 'whisper'));
-      
-      // Create whisper directory if it doesn't exist
-      if (!await whisperDir.exists()) {
-        await whisperDir.create(recursive: true);
-      }
-      
-      final modelPath = path.join(whisperDir.path, 'ggml-base.bin');
-      final modelFile = File(modelPath);
-      
-      // Copy from assets if not exists
-      if (!await modelFile.exists()) {
-        print('Copying model from assets to: $modelPath');
-        final data = await rootBundle.load('assets/models/ggml-base.bin');
-        await modelFile.writeAsBytes(data.buffer.asUint8List());
-        print('Model copied successfully');
-      }
-      
-      _modelPath = modelPath;
-    } catch (e) {
-      print('Error ensuring model exists: $e');
-      rethrow;
-    }
+  /// Start recording (legacy adapter)
+  Future<void> startRecording() async {
+     throw UnimplementedError('Use startListening instead');
   }
 
-  @override
-  Future<String> transcribe(String audioPath) async {
-    if (!_isInitialized) {
-      await initialize();
-    }
-
-    try {
-      final transcription = await _platform.transcribe(audioPath);
-      return transcription.trim();
-    } catch (e) {
-      throw Exception('On-device transcription failed: ${e.toString()}');
-    }
-  }
-
-  @override
-  Future<bool> isModelAvailable() async {
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final whisperDir = Directory(path.join(appDir.path, 'whisper'));
-      final modelPath = path.join(whisperDir.path, 'ggml-base.bin');
-      final modelFile = File(modelPath);
-      
-      // Also check if model exists in assets
-      try {
-        await rootBundle.load('assets/models/ggml-base.bin');
-        print('Model found in assets');
-        return true; // Model is in assets, can be copied
-      } catch (e) {
-        print('Model not in assets: $e');
-      }
-      
-      final exists = await modelFile.exists();
-      if (!exists) {
-        print('Whisper model not found at: $modelPath');
-        print('Expected location: ${whisperDir.path}');
-        print('Download models from: https://huggingface.co/ggerganov/whisper.cpp');
-        print('Or use: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin');
-      }
-      
-      return exists;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Future<void> dispose() async {
-    if (_isInitialized) {
-      await _platform.dispose();
-      _isInitialized = false;
-      _modelPath = null;
-    }
-  }
-}
-
-/// Concrete implementation of VoiceRecorder using record package
-class FlutterAudioRecorder implements VoiceRecorder {
-  final record_pkg.AudioRecorder _recorder;
-  bool _isCurrentlyRecording = false;
-  String? _currentRecordingPath;
-
-  FlutterAudioRecorder() : _recorder = record_pkg.AudioRecorder();
-
-  @override
-  bool isRecording() {
-    return _isCurrentlyRecording;
-  }
-
-  @override
-  Stream<double> getAmplitudeStream() {
-    // Return amplitude stream from the recorder
-    // The record package provides amplitude as a stream
-    return _recorder.onAmplitudeChanged(const Duration(milliseconds: 200)).map((amp) {
-      // Normalize amplitude to 0.0 - 1.0 range
-      // amp.current is typically in dB, ranging from -160 (silence) to 0 (max)
-      final normalized = (amp.current + 60).clamp(0, 60) / 60;
-      return normalized;
-    });
-  }
-
-  @override
-  Future<void> startRecording(String outputPath) async {
-    if (isRecording()) {
-      throw StateError('Already recording');
-    }
-
-    // Check if device supports recording
-    if (!await _recorder.hasPermission()) {
-      throw Exception('Recording permission not granted');
-    }
-    
-    _currentRecordingPath = outputPath;
-    _isCurrentlyRecording = true;
-    
-    await _recorder.start(
-      const record_pkg.RecordConfig(
-        encoder: record_pkg.AudioEncoder.wav,
-        bitRate: 128000,
-        sampleRate: 16000,
-      ),
-      path: outputPath,
-    );
-  }
-
-  @override
+  /// Stop recording (legacy adapter)
   Future<String> stopRecording() async {
-    if (!isRecording()) {
-      throw StateError('Not recording');
-    }
-    
-    final path = await _recorder.stop();
-    final recordingPath = _currentRecordingPath!;
-    _isCurrentlyRecording = false;
-    _currentRecordingPath = null;
-    
-    return path ?? recordingPath;
+    await stopListening();
+    return ''; 
   }
-
-  @override
-  Future<void> dispose() async {
-    if (isRecording()) {
-      await stopRecording();
-    }
-    await _recorder.dispose();
+  
+  /// Transcribe audio (legacy adapter)
+  Future<String> transcribeAudio(String audioPath) async {
+    return ''; 
   }
 }
+
